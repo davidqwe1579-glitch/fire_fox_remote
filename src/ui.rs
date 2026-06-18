@@ -646,7 +646,7 @@ impl UI {
             }
             let host = host.split(':').next().unwrap_or("127.0.0.1").trim().to_string();
             let url = format!("ws://{}:3000/ws", host);
-            match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url)).await {
+            match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url.clone())).await {
                 Ok(Ok((mut ws_stream, _))) => {
                     let req = serde_json::json!({ "user_id": user_id });
                     if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
@@ -697,10 +697,10 @@ impl UI {
                     "OK".to_string()
                 }
                 Ok(Err(e)) => {
-                    format!("Connection failed: {}", e)
+                    format!("Connection failed to {}: {}", url, e)
                 }
                 Err(_) => {
-                    "Connection timed out. Server might be down or firewall blocked.".to_string()
+                    format!("Connection to {} timed out. Server might be down or firewall blocked.", url)
                 }
             }
         })
