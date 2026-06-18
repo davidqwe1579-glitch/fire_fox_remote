@@ -642,9 +642,9 @@ impl UI {
 
             let mut host = hbb_common::config::Config::get_option("custom-rendezvous-server");
             if host.is_empty() {
-                host = "127.0.0.1".to_string();
+                host = "93.127.129.57".to_string();
             }
-            let host = host.split(':').next().unwrap_or("127.0.0.1").trim().to_string();
+            let host = host.split(':').next().unwrap_or("93.127.129.57").trim().to_string();
             let url = format!("ws://{}:3000/ws", host);
             match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url.clone())).await {
                 Ok(Ok((mut ws_stream, _))) => {
