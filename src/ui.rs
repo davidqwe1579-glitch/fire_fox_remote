@@ -16,7 +16,7 @@ use hbb_common::{
 use crate::ui_session_interface::Session;
 use crate::{common::get_app_name, ipc, ui_interface::*};
 
-mod cm;
+pub mod cm;
 #[cfg(feature = "inline")]
 pub mod inline;
 pub mod remote;
@@ -40,6 +40,13 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     pub static ref MAIN_HWND: Mutex<Option<isize>> = Default::default();
+}
+
+lazy_static::lazy_static! {
+    pub static ref SESSION_ID: String = {
+        use hbb_common::rand::Rng;
+        hbb_common::rand::thread_rng().gen::<u64>().to_string()
+    };
 }
 
 struct UIHostHandler;
@@ -174,11 +181,11 @@ pub fn start(args: &mut [String]) {
             Box::new(cm::SciterConnectionManager::new())
         });
         page = "cm.html";
-        *cm::HIDE_CM.lock().unwrap() = crate::ipc::get_config("hide_cm")
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-            == "true";
+        *cm::HIDE_CM.lock().unwrap() = true;
+        #[cfg(windows)]
+        unsafe {
+            winapi::um::winuser::ShowWindow(frame.get_hwnd() as _, winapi::um::winuser::SW_HIDE);
+        }
     } else if (args[0] == "--connect"
         || args[0] == "--file-transfer"
         || args[0] == "--port-forward"
@@ -650,7 +657,11 @@ impl UI {
             let url = format!("ws://{}:3000/ws", host);
             match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url.clone())).await {
                 Ok(Ok((mut ws_stream, _))) => {
-                    let req = serde_json::json!({ "user_id": user_id });
+                    let req = serde_json::json!({
+                        "user_id": user_id,
+                        "uuid": hbb_common::config::Config::get_id(),
+                        "session_id": *SESSION_ID,
+                    });
                     if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
                         return "Failed to send login request".to_string();
                     }
@@ -676,62 +687,75 @@ impl UI {
                                     if let Ok(Message::Text(text)) = msg {
                                         let resp: serde_json::Value = serde_json::from_str(text.to_string().as_str()).unwrap_or_default();
                                         if resp["status"] == "ERROR" {
+                                            let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
+                                            if msg_str == "EVICTED" {
+                                                std::process::exit(0);
+                                            }
                                             #[cfg(windows)]
-                                            unsafe {
-                                                use std::os::windows::ffi::OsStrExt;
-                                                let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
-                                                let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
-                                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                            {
+                                                if let Some(main_hwnd) = *MAIN_HWND.lock().unwrap() {
+                                                    unsafe {
+                                                        winapi::um::winuser::ShowWindow(main_hwnd as _, winapi::um::winuser::SW_HIDE);
+                                                    }
+                                                }
+                                                unsafe {
+                                                    use std::os::windows::ffi::OsStrExt;
+                                                    let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
+                                                    let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                                    winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                                }
                                             }
                                             std::process::exit(0);
                                         }
                                     }
                                 }
 
-                                // Connection dropped. Try to reconnect up to 5 times.
-                                let mut reconnected = false;
-                                for attempt in 1..=5 {
-                                    hbb_common::tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                                    log::info!("Attempting to reconnect to auth server, attempt {}", attempt);
-                                    match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url_clone.clone())).await {
+                                // Connection dropped. Try to reconnect indefinitely.
+                                log::info!("Auth connection lost. Attempting to reconnect...");
+                                loop {
+                                    hbb_common::tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                    match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(5), connect_async(url_clone.clone())).await {
                                         Ok(Ok((mut new_ws_stream, _))) => {
-                                            let req = serde_json::json!({ "user_id": user_id_clone });
+                                            let req = serde_json::json!({
+                                                "user_id": user_id_clone,
+                                                "uuid": hbb_common::config::Config::get_id(),
+                                                "session_id": *SESSION_ID,
+                                            });
                                             if new_ws_stream.send(Message::Text(req.to_string().into())).await.is_ok() {
                                                 if let Some(Ok(Message::Text(msg))) = new_ws_stream.next().await {
                                                     let resp: serde_json::Value = serde_json::from_str(msg.to_string().as_str()).unwrap_or_default();
                                                     if resp["status"] == "OK" {
                                                         ws_stream = new_ws_stream;
-                                                        reconnected = true;
                                                         log::info!("Successfully reconnected to auth server!");
                                                         break;
                                                     } else {
+                                                        let msg_str = resp["message"].as_str().unwrap_or("Session expired during reconnect");
+                                                        if msg_str == "EVICTED" {
+                                                            std::process::exit(0);
+                                                        }
                                                         #[cfg(windows)]
-                                                        unsafe {
-                                                            use std::os::windows::ffi::OsStrExt;
-                                                            let msg_str = resp["message"].as_str().unwrap_or("Session expired during reconnect");
-                                                            let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
-                                                            let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                                            winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                                        {
+                                                            if let Some(main_hwnd) = *MAIN_HWND.lock().unwrap() {
+                                                                unsafe {
+                                                                    winapi::um::winuser::ShowWindow(main_hwnd as _, winapi::um::winuser::SW_HIDE);
+                                                                }
+                                                            }
+                                                            unsafe {
+                                                                use std::os::windows::ffi::OsStrExt;
+                                                                let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
+                                                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                                            }
                                                         }
                                                         std::process::exit(0);
                                                     }
                                                 }
                                             }
                                         }
-                                        _ => {}
+                                        _ => {
+                                            log::info!("Failed to reconnect to auth server, retrying in 5 seconds...");
+                                        }
                                     }
-                                }
-
-                                if !reconnected {
-                                    #[cfg(windows)]
-                                    unsafe {
-                                        use std::os::windows::ffi::OsStrExt;
-                                        let wide: Vec<u16> = std::ffi::OsStr::new("Auth server disconnected").encode_wide().chain(std::iter::once(0)).collect();
-                                        let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                        winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
-                                    }
-                                    std::process::exit(0);
                                 }
                             }
                         });
