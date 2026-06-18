@@ -735,7 +735,7 @@ class App: Reactor.Component
                         app.update();
                         
                         var r = app.saved_window_size;
-                        if (r && isReasonableSize(r) && r[2] > 0) {
+                        if (r && isReasonableSize(r) && r[2] > 0 && !(r[2] == scaleIt(360) && r[3] == scaleIt(460))) {
                             var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
                             if (r[2] >= sw && r[3] >= sh) {
                                 self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
@@ -1717,7 +1717,11 @@ event click $(li#login) (_, me) {
 
 function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
-    handler.closing(x, y, w, h);
+    if (app && app.is_logged_in) {
+        handler.closing(x, y, w, h);
+    } else {
+        handler.closing(x, y, 0, 0);
+    }
     return true;
 }
 
