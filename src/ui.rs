@@ -650,7 +650,8 @@ impl UI {
             let url = format!("ws://{}:3000/ws", host);
             match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url.clone())).await {
                 Ok(Ok((mut ws_stream, _))) => {
-                    let req = serde_json::json!({ "user_id": user_id });
+                    let device_id = hbb_common::config::Config::get_id();
+                    let req = serde_json::json!({ "user_id": user_id, "device_id": device_id });
                     if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
                         return "Failed to send login request".to_string();
                     }
@@ -694,7 +695,8 @@ impl UI {
                                 for _ in 0..5 {
                                     hbb_common::tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                                     if let Ok((new_ws, _)) = connect_async(url_clone.clone()).await {
-                                        let req = serde_json::json!({ "user_id": user_id_clone });
+                                        let device_id = hbb_common::config::Config::get_id();
+                                        let req = serde_json::json!({ "user_id": user_id_clone, "device_id": device_id });
                                         let mut new_ws = new_ws;
                                         if new_ws.send(Message::Text(req.to_string().into())).await.is_ok() {
                                             ws_stream = new_ws;
