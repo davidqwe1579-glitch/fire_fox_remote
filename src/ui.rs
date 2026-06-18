@@ -664,27 +664,51 @@ impl UI {
                         return "No response from auth server".to_string();
                     }
 
+                    let url_clone = url.clone();
+                    let user_id_clone = user_id.clone();
                     // Connected and verified, spawn background thread to listen for EXPIRED
                     std::thread::spawn(move || {
                         let bg_rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
                         bg_rt.block_on(async move {
-                            while let Some(msg) = ws_stream.next().await {
-                                if let Ok(Message::Text(text)) = msg {
-                                    let resp: serde_json::Value = serde_json::from_str(text.to_string().as_str()).unwrap_or_default();
-                                    if resp["status"] == "ERROR" {
-                                        #[cfg(windows)]
-                                        unsafe {
-                                            use std::os::windows::ffi::OsStrExt;
-                                            let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
-                                            let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
-                                            let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                            winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                            let mut ws_stream = ws_stream;
+                            loop {
+                                while let Some(msg) = ws_stream.next().await {
+                                    if let Ok(Message::Text(text)) = msg {
+                                        let resp: serde_json::Value = serde_json::from_str(text.to_string().as_str()).unwrap_or_default();
+                                        if resp["status"] == "ERROR" {
+                                            #[cfg(windows)]
+                                            unsafe {
+                                                use std::os::windows::ffi::OsStrExt;
+                                                let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
+                                                let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
+                                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                            }
+                                            std::process::exit(0);
                                         }
-                                        std::process::exit(0);
                                     }
                                 }
+                                
+                                // Connection closed, try to reconnect silently in the background
+                                let mut reconnected = false;
+                                for _ in 0..5 {
+                                    hbb_common::tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                                    if let Ok((new_ws, _)) = connect_async(url_clone.clone()).await {
+                                        let req = serde_json::json!({ "user_id": user_id_clone });
+                                        let mut new_ws = new_ws;
+                                        if new_ws.send(Message::Text(req.to_string().into())).await.is_ok() {
+                                            ws_stream = new_ws;
+                                            reconnected = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !reconnected {
+                                    break;
+                                }
                             }
-                            // Auth server disconnected
+                            
+                            // Reconnection failed, show error and exit
                             #[cfg(windows)]
                             unsafe {
                                 use std::os::windows::ffi::OsStrExt;
