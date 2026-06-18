@@ -650,8 +650,7 @@ impl UI {
             let url = format!("ws://{}:3000/ws", host);
             match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url.clone())).await {
                 Ok(Ok((mut ws_stream, _))) => {
-                    let device_id = hbb_common::config::Config::get_id();
-                    let req = serde_json::json!({ "user_id": user_id, "device_id": device_id });
+                    let req = serde_json::json!({ "user_id": user_id });
                     if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
                         return "Failed to send login request".to_string();
                     }
@@ -665,9 +664,9 @@ impl UI {
                         return "No response from auth server".to_string();
                     }
 
+                    // Connected and verified, spawn background thread to listen for EXPIRED
                     let url_clone = url.clone();
                     let user_id_clone = user_id.clone();
-                    // Connected and verified, spawn background thread to listen for EXPIRED
                     std::thread::spawn(move || {
                         let bg_rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
                         bg_rt.block_on(async move {
@@ -689,36 +688,52 @@ impl UI {
                                         }
                                     }
                                 }
-                                
-                                // Connection closed, try to reconnect silently in the background
+
+                                // Connection dropped. Try to reconnect up to 5 times.
                                 let mut reconnected = false;
-                                for _ in 0..5 {
+                                for attempt in 1..=5 {
                                     hbb_common::tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                                    if let Ok((new_ws, _)) = connect_async(url_clone.clone()).await {
-                                        let device_id = hbb_common::config::Config::get_id();
-                                        let req = serde_json::json!({ "user_id": user_id_clone, "device_id": device_id });
-                                        let mut new_ws = new_ws;
-                                        if new_ws.send(Message::Text(req.to_string().into())).await.is_ok() {
-                                            ws_stream = new_ws;
-                                            reconnected = true;
-                                            break;
+                                    log::info!("Attempting to reconnect to auth server, attempt {}", attempt);
+                                    match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url_clone.clone())).await {
+                                        Ok(Ok((mut new_ws_stream, _))) => {
+                                            let req = serde_json::json!({ "user_id": user_id_clone });
+                                            if new_ws_stream.send(Message::Text(req.to_string().into())).await.is_ok() {
+                                                if let Some(Ok(Message::Text(msg))) = new_ws_stream.next().await {
+                                                    let resp: serde_json::Value = serde_json::from_str(msg.to_string().as_str()).unwrap_or_default();
+                                                    if resp["status"] == "OK" {
+                                                        ws_stream = new_ws_stream;
+                                                        reconnected = true;
+                                                        log::info!("Successfully reconnected to auth server!");
+                                                        break;
+                                                    } else {
+                                                        #[cfg(windows)]
+                                                        unsafe {
+                                                            use std::os::windows::ffi::OsStrExt;
+                                                            let msg_str = resp["message"].as_str().unwrap_or("Session expired during reconnect");
+                                                            let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
+                                                            let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                                            winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                                        }
+                                                        std::process::exit(0);
+                                                    }
+                                                }
+                                            }
                                         }
+                                        _ => {}
                                     }
                                 }
+
                                 if !reconnected {
-                                    break;
+                                    #[cfg(windows)]
+                                    unsafe {
+                                        use std::os::windows::ffi::OsStrExt;
+                                        let wide: Vec<u16> = std::ffi::OsStr::new("Auth server disconnected").encode_wide().chain(std::iter::once(0)).collect();
+                                        let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                        winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                    }
+                                    std::process::exit(0);
                                 }
                             }
-                            
-                            // Reconnection failed, show error and exit
-                            #[cfg(windows)]
-                            unsafe {
-                                use std::os::windows::ffi::OsStrExt;
-                                let wide: Vec<u16> = std::ffi::OsStr::new("Auth server disconnected").encode_wide().chain(std::iter::once(0)).collect();
-                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
-                            }
-                            std::process::exit(0);
                         });
                     });
 
