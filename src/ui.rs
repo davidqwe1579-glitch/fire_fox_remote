@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     iter::FromIterator,
     sync::{Arc, Mutex},
 };
@@ -32,6 +32,14 @@ lazy_static::lazy_static! {
 #[cfg(not(any(feature = "flutter", feature = "cli")))]
 lazy_static::lazy_static! {
     pub static ref CUR_SESSION: Arc<Mutex<Option<Session<remote::SciterHandler>>>> = Default::default();
+}
+
+lazy_static::lazy_static! {
+    pub static ref CCTV_QUEUE: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+}
+
+lazy_static::lazy_static! {
+    pub static ref MAIN_HWND: Mutex<Option<isize>> = Default::default();
 }
 
 struct UIHostHandler;
@@ -82,6 +90,42 @@ pub fn start(args: &mut [String]) {
         ALLOW_FILE_IO as u8 | ALLOW_SOCKET_IO as u8 | ALLOW_EVAL as u8 | ALLOW_SYSINFO as u8
     )));
     let mut frame = sciter::WindowBuilder::main_window().create();
+
+    let mut parent_hwnd = None;
+    for i in 0..args.len() {
+        if args[i] == "--parent-hwnd" && i + 1 < args.len() {
+            if let Ok(val) = args[i + 1].parse::<isize>() {
+                parent_hwnd = Some(val as winapi::shared::windef::HWND);
+            }
+        }
+    }
+
+    if parent_hwnd.is_none() {
+        *MAIN_HWND.lock().unwrap() = Some(frame.get_hwnd() as isize);
+    } else {
+        #[cfg(windows)]
+        if let Some(parent_hw) = parent_hwnd {
+            let hwnd = frame.get_hwnd() as winapi::shared::windef::HWND;
+            unsafe {
+                let mut style = winapi::um::winuser::GetWindowLongW(hwnd, winapi::um::winuser::GWL_STYLE);
+                style &= !((winapi::um::winuser::WS_CAPTION
+                    | winapi::um::winuser::WS_THICKFRAME
+                    | winapi::um::winuser::WS_MINIMIZEBOX
+                    | winapi::um::winuser::WS_MAXIMIZEBOX
+                    | winapi::um::winuser::WS_SYSMENU) as i32);
+                style |= winapi::um::winuser::WS_CHILD as i32;
+                winapi::um::winuser::SetWindowLongW(hwnd, winapi::um::winuser::GWL_STYLE, style);
+                winapi::um::winuser::SetParent(hwnd, parent_hw);
+                winapi::um::winuser::SetWindowPos(
+                    hwnd,
+                    std::ptr::null_mut(),
+                    0, 0, 0, 0,
+                    winapi::um::winuser::SWP_NOMOVE | winapi::um::winuser::SWP_NOSIZE | winapi::um::winuser::SWP_NOZORDER | winapi::um::winuser::SWP_FRAMECHANGED,
+                );
+                winapi::um::winuser::ShowWindow(hwnd, winapi::um::winuser::SW_SHOW);
+            }
+        }
+    }
     #[cfg(windows)]
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(&crate::get_app_name());
@@ -105,6 +149,18 @@ pub fn start(args: &mut [String]) {
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
+        // Register native-remote behavior for CCTV embedded video
+        frame.register_behavior("native-remote", move || {
+            let id = CCTV_QUEUE.lock().unwrap().pop_front().unwrap_or_default();
+            log::info!("[CCTV] creating session for peer: {}", id);
+            let handler = remote::SciterSession::new(
+                "--connect".to_string(),
+                id,
+                "".to_string(),
+                vec![],
+            );
+            Box::new(handler)
+        });
         page = "index.html";
         // Start pulse audio local server.
         #[cfg(target_os = "linux")]
@@ -130,7 +186,7 @@ pub fn start(args: &mut [String]) {
         && args.len() > 1
     {
         #[cfg(windows)]
-        {
+        if parent_hwnd.is_none() {
             let hw = frame.get_host().get_hwnd();
             crate::platform::windows::enable_lowlevel_keyboard(hw as _);
         }
@@ -482,6 +538,10 @@ impl UI {
         PeerConfig::remove(&id);
     }
 
+    fn add_peer(&mut self, id: String) {
+        add_peer(id)
+    }
+
     fn remove_discovered(&mut self, id: String) {
         remove_discovered(id);
     }
@@ -492,6 +552,158 @@ impl UI {
 
     fn new_remote(&mut self, id: String, remote_type: String, force_relay: bool) {
         new_remote(id, remote_type, force_relay)
+    }
+
+    fn new_file_transfer_auto(&mut self, id: String, password: String, folder: String) {
+        crate::ui_interface::new_file_transfer_auto(id, password, folder)
+    }
+
+    fn new_remote_cctv(&mut self, id: String, remote_type: String, index: i32, total: i32) {
+        new_remote_cctv(id, remote_type, index, total)
+    }
+
+    fn update_cctv_child_pos(&mut self, peer_id: String, x: i32, y: i32, w: i32, h: i32) {
+        #[cfg(windows)]
+        {
+            let main_hwnd = match *MAIN_HWND.lock().unwrap() {
+                Some(h) => h as winapi::shared::windef::HWND,
+                None => return,
+            };
+            
+            struct EnumData {
+                target_title: String,
+                found_hwnd: Option<winapi::shared::windef::HWND>,
+            }
+            
+            unsafe extern "system" fn enum_child_proc(
+                hwnd: winapi::shared::windef::HWND,
+                lparam: winapi::shared::minwindef::LPARAM,
+            ) -> winapi::shared::minwindef::BOOL {
+                let data = &mut *(lparam as *mut EnumData);
+                let mut buf = [0u16; 512];
+                let len = winapi::um::winuser::GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+                if len > 0 {
+                    let title = String::from_utf16_lossy(&buf[..len as usize]);
+                    let clean_title = title.replace(" ", "");
+                    let clean_target = data.target_title.replace(" ", "");
+                    if clean_title == clean_target {
+                        data.found_hwnd = Some(hwnd);
+                        return winapi::shared::minwindef::FALSE;
+                    }
+                }
+                winapi::shared::minwindef::TRUE
+            }
+            
+            let mut data = EnumData {
+                target_title: peer_id,
+                found_hwnd: None,
+            };
+            
+            unsafe {
+                winapi::um::winuser::EnumChildWindows(
+                    main_hwnd,
+                    Some(enum_child_proc),
+                    &mut data as *mut _ as winapi::shared::minwindef::LPARAM,
+                );
+                
+                if let Some(child_hwnd) = data.found_hwnd {
+                    winapi::um::winuser::MoveWindow(
+                        child_hwnd,
+                        x,
+                        y,
+                        w,
+                        h,
+                        winapi::shared::minwindef::TRUE,
+                    );
+                }
+            }
+        }
+    }
+
+    fn close_all_cctv(&mut self) {
+        close_all_cctv();
+    }
+
+    fn push_cctv_peer(&mut self, id: String) {
+        CCTV_QUEUE.lock().unwrap().push_back(id);
+    }
+
+    fn clear_cctv_queue(&mut self) {
+        CCTV_QUEUE.lock().unwrap().clear();
+    }
+
+    fn auth_login(&mut self, user_id: String) -> String {
+        let rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            use hbb_common::tokio::net::TcpStream;
+            use tokio_tungstenite::tungstenite::Message;
+            use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+            use hbb_common::futures_util::{SinkExt, StreamExt};
+
+            let mut host = hbb_common::config::Config::get_option("custom-rendezvous-server");
+            if host.is_empty() {
+                host = "127.0.0.1".to_string();
+            }
+            let host = host.split(':').next().unwrap_or("127.0.0.1").trim().to_string();
+            let url = format!("ws://{}:3000/ws", host);
+            match hbb_common::tokio::time::timeout(std::time::Duration::from_secs(3), connect_async(url)).await {
+                Ok(Ok((mut ws_stream, _))) => {
+                    let req = serde_json::json!({ "user_id": user_id });
+                    if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
+                        return "Failed to send login request".to_string();
+                    }
+
+                    if let Some(Ok(Message::Text(msg))) = ws_stream.next().await {
+                        let resp: serde_json::Value = serde_json::from_str(msg.to_string().as_str()).unwrap_or_default();
+                        if resp["status"] != "OK" {
+                            return resp["message"].as_str().unwrap_or("Login failed").to_string();
+                        }
+                    } else {
+                        return "No response from auth server".to_string();
+                    }
+
+                    // Connected and verified, spawn background thread to listen for EXPIRED
+                    std::thread::spawn(move || {
+                        let bg_rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
+                        bg_rt.block_on(async move {
+                            while let Some(msg) = ws_stream.next().await {
+                                if let Ok(Message::Text(text)) = msg {
+                                    let resp: serde_json::Value = serde_json::from_str(text.to_string().as_str()).unwrap_or_default();
+                                    if resp["status"] == "ERROR" {
+                                        #[cfg(windows)]
+                                        unsafe {
+                                            use std::os::windows::ffi::OsStrExt;
+                                            let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
+                                            let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
+                                            let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                            winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                                        }
+                                        std::process::exit(0);
+                                    }
+                                }
+                            }
+                            // Auth server disconnected
+                            #[cfg(windows)]
+                            unsafe {
+                                use std::os::windows::ffi::OsStrExt;
+                                let wide: Vec<u16> = std::ffi::OsStr::new("Auth server disconnected").encode_wide().chain(std::iter::once(0)).collect();
+                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
+                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
+                            }
+                            std::process::exit(0);
+                        });
+                    });
+
+                    "OK".to_string()
+                }
+                Ok(Err(e)) => {
+                    format!("Connection failed: {}", e)
+                }
+                Err(_) => {
+                    "Connection timed out. Server might be down or firewall blocked.".to_string()
+                }
+            }
+        })
     }
 
     fn is_process_trusted(&mut self, _prompt: bool) -> bool {
@@ -743,8 +955,16 @@ impl sciter::EventHandler for UI {
         fn closing(i32, i32, i32, i32);
         fn get_size();
         fn new_remote(String, String, bool);
+        fn new_file_transfer_auto(String, String, String);
+        fn new_remote_cctv(String, String, i32, i32);
+        fn update_cctv_child_pos(String, i32, i32, i32, i32);
+        fn close_all_cctv();
+        fn push_cctv_peer(String);
+        fn clear_cctv_queue();
+        fn auth_login(String);
         fn send_wol(String);
         fn remove_peer(String);
+        fn add_peer(String);
         fn remove_discovered(String);
         fn get_connect_status();
         fn get_mouse_time();
@@ -865,14 +1085,5 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
 }
 
 pub fn get_icon() -> String {
-    // 128x128
-    #[cfg(target_os = "macos")]
-    // 128x128 on 160x160 canvas, then shrink to 128, mac looks better with padding
-    {
-        "data:image/png;base64,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".into()
-    }
-    #[cfg(not(target_os = "macos"))] // 128x128 no padding
-    {
-        "data:image/png;base64,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".into()
-    }
+    "data:image/png;base64,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".to_string()
 }

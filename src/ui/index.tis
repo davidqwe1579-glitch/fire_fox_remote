@@ -30,7 +30,7 @@ if (incoming_only) {
 var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
-var service_stopped = handler.get_option("stop-service") == "Y";
+var service_stopped = false;
 var disable_udp = handler.get_option("disable-udp") == "Y";
 var using_public_server = handler.using_public_server();
 var software_update_url = "";
@@ -84,8 +84,7 @@ class ConnectStatus: Reactor.Component {
         } else if (connect_status == 0) {
             return translate('connecting_status');
         }
-        if (!handler.using_public_server()) return translate('Ready');
-        return <span>{translate("Ready")}, <span .link #setup-server>{translate("setup_server_tip")}</span></span>;
+        return translate('Ready');
     }
 
     event click $(#start-service) () {
@@ -99,7 +98,9 @@ class ConnectStatus: Reactor.Component {
 
 function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
-    app.remote_id.value = formatId(id);
+    if (app.remote_id && app.remote_id.value !== undefined) {
+        app.remote_id.value = formatId(id);
+    }
     if (!id) return;
     var old_id = id;
     id = handler.handle_relay_id(id);
@@ -586,8 +587,6 @@ class MyIdMenu: Reactor.Component {
                 el.attributes.toggleClass("selected", enabled);
                 el.attributes.toggleClass("line-through", !enabled);
             } else if (id == "whitelist") {
-                // whitelist should be clickable even when fixed (to view the content)
-                // The dialog will show readonly textarea and no OK button when fixed
                 continue;
             }
             if (is_opt_fixed) {
@@ -595,6 +594,8 @@ class MyIdMenu: Reactor.Component {
             }
         }
     }
+
+
 
     function showAbout() {
         var name = handler.get_app_name();
@@ -706,54 +707,227 @@ class App: Reactor.Component
 {
     function this() {
         app = this;
+        this.cctv_cell_size = 300;
+        this.is_logged_in = false;
+        this.login_id = "";
+        this.login_error = "";
+    }
+
+    event click $(button#btn-login) () {
+        try {
+            var id = (this.login_id || "").toString().replace(/\s/g, "");
+            if (!id) {
+                this.login_error = "";
+                this.update();
+                msgbox("custom-error", "Input Required", "Please enter a valid User ID.");
+                return;
+            }
+            
+            var app = this;
+            app.login_error = "Connecting to server...";
+            app.update();
+            
+            app.timer(20ms, function() {
+                try {
+                    var resp = handler.auth_login(id);
+                    if (resp == "OK") {
+                        app.is_logged_in = true;
+                        app.update();
+                        
+                        var r = app.saved_window_size;
+                        if (r && isReasonableSize(r) && r[2] > 0) {
+                            var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
+                            if (r[2] >= sw && r[3] >= sh) {
+                                self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
+                            } else {
+                                view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
+                            }
+                        } else {
+                            centerize(scaleIt(incoming_only ? incoming_only_width : 800), scaleIt(incoming_only ? 390 : 600));
+                        }
+                    } else {
+                        app.login_error = "";
+                        app.update();
+                        msgbox("custom-error", "Authentication Failed", resp || "Undefined response");
+                    }
+                } catch (e) {
+                    app.login_error = "";
+                    app.update();
+                    msgbox("custom-error", "Error", "TIS Exception: " + e.toString());
+                }
+            });
+        } catch (global_err) {
+            msgbox("custom-error", "Error", "Outer Exception: " + global_err.toString());
+        }
+    }
+
+    event change $(input#login-id) (evt, el) {
+        this.login_id = el.value;
+    }
+
+    function on_login_success() {
+        // called from rust if we do async, but we made it sync so this is just in case
+        this.is_logged_in = true;
+        this.update();
     }
 
     function render() {
         var is_can_screen_recording = handler.is_can_screen_recording(false);
-        return
-            <div .app>
-                    <div .left-pane style={incoming_only ? "width:*" : ""}>
-                    <div>
-                        {is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
-                        <div .title style="flow:horizontal; position:relative; height:1.6em; line-height:1.6em">
-                            <span>{translate('Your Desktop')}</span>
-                            {outgoing_only ? <span .link #open-settings style="position:absolute; right:0; bottom:0; transform:scale(0.6); transform-origin:right bottom; opacity:0.85">{svg_menu}</span> : ""}
+        
+        if (!this.is_logged_in) {
+            return
+                <div style="size: *; background: linear-gradient(135deg, #09090b, #121218); font-family: system-ui, sans-serif;">
+                    <div style="margin: *; width: 320px; padding: 25px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px; box-shadow: 0 6px 25px rgba(0,255,255,0.1); text-align: center; flow: vertical;">
+                        <h1 style="color: #00ffff; font-weight: 800; font-size: 1.6em; margin-top: 0; margin-bottom: 8px; text-shadow: 0 0 10px rgba(0,255,255,0.5);">FireFox CCTV</h1>
+                        <div style="color: #889; margin-bottom: 20px; font-weight: 600; font-size: 0.9em;">System Authentication Required</div>
+                        
+                        <div style="margin-bottom: 15px; text-align: left; flow: vertical;">
+                            <label style="color: #00ffff; font-weight: bold; font-size: 0.85em; margin-bottom: 6px; display: block;">User ID</label>
+                            <input #login-id type="text" value={this.login_id || ""} style="width: *; height: 36px; background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,255,0.3); border-radius: 6px; color: white; padding: 0 12px; font-size: 1em; outline: none; transition: color 0.3s;" placeholder="Enter your User ID" />
                         </div>
-                        <div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') : translate('desk_tip')}</div>
-                        {outgoing_only ? <div style="position:absolute; left:-10000px; top:-10000px; width:0; height:0; overflow:hidden"><MyIdMenu /></div> : ""}
-                        {!outgoing_only && <div .your-desktop>
-                            <MyIdMenu />
-                            {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
-                        </div>}
-                        {!outgoing_only && <PasswordArea />}
+                        
+                        {this.login_error ? <div style="color: #ff3366; margin-bottom: 12px; font-weight: bold; font-size: 0.9em; text-shadow: 0 0 5px rgba(255,51,102,0.5);">{this.login_error}</div> : ""}
+                        
+                        <button #btn-login style="display: block; width: *; height: 40px; background: linear-gradient(135deg, #00c6ff, #0072ff); color: white; border: none; border-radius: 6px; font-weight: 800; font-size: 1em; cursor: pointer; box-shadow: 0 4px 15px rgba(0,114,255,0.4); transition: color 0.2s;">
+                            LOGIN
+                        </button>
                     </div>
-                    {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
-                    {software_update_url && !disable_installation ? <UpdateMe /> : ""}
-                    {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
-                    {is_can_screen_recording ? "": <CanScreenRecording />}
-                    {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
-                    {system_error ? <SystemError /> : ""}
-                    {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
-                    {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
-                    {incoming_only ? <ConnectStatus @{this.connect_status} /> : ""}
+                </div>;
+        }
+
+        if (this.show_cctv) {
+            return
+                <div .app>
+                    <div #cctv-view style="size: *; padding: 0; background: linear-gradient(135deg, #09090b, #121218); overflow: hidden; flow: vertical;">
+                        <div style="flow: horizontal; height: 36px; line-height: 36px; padding: 2px 15px; background: linear-gradient(to bottom, #161622, #0d0d15); border-bottom: 1px solid rgba(0,255,255,0.1);">
+                            <span style="font-size: 1.1em; color: #00ffff; font-weight: 800; vertical-align: middle; font-family: system-ui, sans-serif; text-shadow: 0 0 10px rgba(0,255,255,0.5); margin-right: 20px;">CCTV DASHBOARD</span>
+                            <span style="color: #667; font-size: 0.8em; margin-left: 15px; vertical-align: middle; font-family: system-ui, sans-serif; font-weight: 600;">CELL SIZE:</span>
+                            <input #cctv-size-slider type="hslider" style="width: 180px; margin: 0 10px; vertical-align: middle;" min="50" max="800" step="10" value={this.cctv_cell_size || 300} />
+                            <span #cctv-size-label style="color: #00ffff; font-size: 0.85em; font-weight: 700; font-family: system-ui, sans-serif; vertical-align: middle; min-width: 40px; text-shadow: 0 0 5px rgba(0,255,255,0.3);">{this.cctv_cell_size || 300}px</span>
+                            <button .button #cctv-reboot-all style="margin-left: 10px; background: linear-gradient(135deg, #9a3412, #f97316); color: white; border: 1px solid rgba(249,115,22,0.5); border-radius: 12px; padding: 0 16px; height: 26px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 8px rgba(249,115,22,0.3); transition: all 0.2s;">모든 컴퓨터 재부팅</button>
+                            <button .button #cctv-close style="margin-left: *; background: linear-gradient(135deg, #9f1239, #f43f5e); color: white; border: 1px solid rgba(244,63,94,0.5); border-radius: 12px; padding: 0 16px; height: 26px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 8px rgba(244,63,94,0.3); transition: all 0.2s;">✕ CLOSE</button>
+                        </div>
+                        <div #cctv-grid-container style="size: *; flow: horizontal-flow; background: transparent; overflow-y: auto; overflow-x: hidden; padding: 10px; border-spacing: 0;">
+                            { (function() {
+                                var cells = [];
+                                var sessions = app.cctv_sessions || handler.get_recent_sessions() || [];
+                                var total = sessions.length;
+                                if (total > 16) total = 16;
+                                if (total == 0) total = 1;
+                                
+                                // Default cell size: will be resized by timer
+                                var cw = app.cell_w || app.cctv_cell_size || 300;
+                                var ch = app.cell_h || ((cw * 9 / 16).toInteger());
+                                var cell_style = "width:" + cw + "px;height:" + ch + "px;";
+                                
+                                for (var i = 0; i < total; ++i) {
+                                    var session = i < sessions.length ? sessions[i] : null;
+                                    var cell_id = session ? "cctv-cell-" + session[0].replace(" ", "") : "cctv-cell-empty-" + i;
+                                    
+                                    var header_text = (i + 1) + " ";
+                                    if (session) {
+                                        header_text += (session[4] || formatId(session[0]));
+                                    }
+                                    
+                                    if (session) {
+                                        cells.push(
+                                            <div .cctv-cell id={cell_id} style={cell_style} index={i}>
+                                                <div .cctv-label>
+                                                    {header_text}
+                                                </div>
+                                                <video />
+                                            </div>
+                                        );
+                                    } else {
+                                        cells.push(
+                                            <div .cctv-cell .empty id={cell_id} style={cell_style} index={i}>
+                                                <div .cctv-label style="color: #444;">
+                                                    {header_text}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                }
+                                // Resize after DOM layout is ready
+                                self.timer(100ms, updateCctvLayout);
+                                return cells;
+                            })() }
+                        </div>
+                    </div>
+                    <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
+                </div>;
+        }
+
+        return
+            <div .dashboard-app>
+                <div .top-header>
+                    <div .brand-title>FireFox CCTV</div>
+                    <div .top-nav-items>
+                        {outgoing_only ? <span .link #open-settings style="margin-left: 10px;">{svg_menu}</span> : ""}
+                        {!outgoing_only && <div .my-credentials style="flow:horizontal; align-items:center;">
+                            <div .your-desktop style="margin-right: 15px;">
+                                <div>{translate('Your Desktop')}</div>
+                                <div style="flow:horizontal; align-items:center; margin-top: 4px;">
+                                    <MyIdMenu />
+                                    {key_confirmed ? <input type="text" readonly value={formatId(get_id())} style="background:transparent; border:none; color:#00ffff; font-weight:bold; width:130px; margin-left: 8px;"/> : translate("Generating ...")}
+                                </div>
+                            </div>
+                            <PasswordArea />
+                            <button .button #cctv-connect style="margin-left: 20px; margin-top: 6px; height: 32px; padding: 0 15px; font-weight: bold; background: linear-gradient(135deg, #00c6ff, #0072ff); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,114,255,0.4); font-size: 0.9em;">CCTV Mode</button>
+                        </div>}
+                    </div>
                 </div>
-                {!incoming_only && <div .right-pane>
-                    <div .right-content>
-                        <div .card-connect>
-                            <div .title>{translate('Control Remote Desktop')}</div>
+
+                <div .main-content style={incoming_only ? "display:none;" : ""}>
+                    <div .hero-connect-section>
+                        <div .title>{translate('Control Remote Desktop')}</div>
+                        <div .connect-inputs style="flow:horizontal; align-items:center;">
                             <ID @{this.remote_id} />
-                            <div .right-buttons>
-                                <button .button .outline #file-transfer>{translate('Transfer file')}</button>
-                                <button .button #connect>{translate('Connect')}</button>
+                            <div .right-buttons style="flow:horizontal; margin-left: 15px;">
+                                <button .button .outline #add-peer>{"추가"}</button>
+                                <button .button .outline #file-transfer style="margin-left:10px;">{translate('Transfer file')}</button>
+                                <button .button #connect style="margin-left:10px;">{translate('Connect')}</button>
                             </div>
                         </div>
+                    </div>
+
+                    <div .sessions-grid-section>
+                        <div .title style="margin-bottom: 15px;">Recent Sessions</div>
                         <MultipleSessions @{this.multipleSessions} />
                     </div>
-                    {!outgoing_only ? <ConnectStatus @{this.connect_status} /> : ""}
-                </div>}
+                </div>
+
+                <div .system-banners style="position: absolute; bottom: 0; left: 0; padding: 10px; width: 300px; pointer-events: none; z-index: 100;">
+                    <div style="pointer-events: auto;">
+                        {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
+                        {software_update_url && !disable_installation ? <UpdateMe /> : ""}
+                        {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() && !disable_installation ? <UpgradeMe /> : ""}
+                        {is_can_screen_recording ? "": <CanScreenRecording />}
+                        {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
+                        {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                        {system_error ? <SystemError /> : ""}
+                        {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
+                        {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
+                        <ConnectStatus @{this.connect_status} />
+                    </div>
+                </div>
+
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
-            </div>; 
+            </div>;
+    }
+
+    event click $(button#add-peer) {
+        var id = (this.remote_id.value || "").replace(/\s/g, "");
+        if (!id) return;
+        id = handler.handle_relay_id(id);
+        if (id == my_id) {
+            msgbox("custom-error", "Error", "You cannot add your own computer");
+            return;
+        }
+        // Create a PeerConfig entry on disk (with platform info) so it shows in recent sessions
+        handler.add_peer(id);
+        // Force UI refresh
+        this.update();
     }
 
     event click $(button#connect) {
@@ -762,6 +936,157 @@ class App: Reactor.Component
 
     event click $(button#file-transfer) {
         this.newRemote("file-transfer");
+    }
+
+    event click $(button#cctv-connect) {
+        var sessions = handler.get_recent_sessions();
+        if (!sessions || sessions.length == 0) {
+            msgbox("custom-error", "CCTV", translate("Empty"));
+            return;
+        }
+        
+        var total = sessions.length < 16 ? sessions.length : 16;
+        handler.close_all_cctv();
+        this.cctv_sessions = [];
+        handler.clear_cctv_queue();
+        for (var i = 0; i < total; ++i) {
+            this.cctv_sessions.push(sessions[i]);
+            handler.push_cctv_peer(sessions[i][0]);
+        }
+        
+        this.show_cctv = true;
+        this.update();
+    }
+
+    event click $(button#cctv-close) {
+        handler.close_all_cctv();
+        this.cctv_sessions = [];
+        this.show_cctv = false;
+        this.update();
+    }
+
+
+
+    event click $(button#cctv-reboot-all) {
+        var videos = this.$$(video);
+        if (!videos || videos.length == 0) {
+            msgbox("custom-error", "재부팅", "연결된 컴퓨터가 없습니다.");
+            return;
+        }
+        msgbox("restart-confirmation", "모든 컴퓨터 재부팅", "정말 모든 컴퓨터를 재부팅하시겠습니까?", "", function(res=null) {
+            if (res != null) {
+                for (var v in videos) {
+                    if (v.restart_remote_device) {
+                        v.restart_remote_device();
+                    }
+                }
+            }
+        });
+    }
+
+    event change $(input#cctv-size-slider) (evt) {
+        var v = evt.target.value.toInteger();
+        if (v < 50) v = 50;
+        if (v > 800) v = 800;
+        this.cctv_cell_size = v;
+        app.cctv_cell_size = v;
+        var lbl = $(span#cctv-size-label);
+        if (lbl) lbl.text = v.toString() + "px";
+        updateCctvLayout();
+    }
+
+    event click $(.cctv-cell) (evt) {
+        if (!evt.mainButton) return;
+        var cell = evt.target;
+        if (cell && !cell.attributes.hasClass("cctv-cell")) {
+            cell = cell.parent;
+        }
+        if (!cell || !cell.attributes.hasClass("cctv-cell")) return;
+        var clicked_idx = cell.attributes["index"].toInteger();
+        
+        if (this.selected_cctv_index === undefined || this.selected_cctv_index === null) {
+            this.selected_cctv_index = clicked_idx;
+            cell.attributes.addClass("selected");
+        } else {
+            var idx1 = this.selected_cctv_index;
+            var idx2 = clicked_idx;
+            
+            if (idx1 != idx2) {
+                var prev_cell = $(.cctv-cell.selected);
+                if (prev_cell) prev_cell.attributes.removeClass("selected");
+                
+                this.selected_cctv_index = clicked_idx;
+                cell.attributes.addClass("selected");
+            } else {
+                this.selected_cctv_index = null;
+                cell.attributes.removeClass("selected");
+            }
+        }
+    }
+
+    event dblclick $(.cctv-cell) (evt) {
+        if (!evt.mainButton) return;
+        var prev_cell = $(.cctv-cell.selected);
+        if (prev_cell) prev_cell.attributes.removeClass("selected");
+        this.selected_cctv_index = null;
+        
+        var cell = evt.target;
+        if (cell && !cell.attributes.hasClass("cctv-cell")) {
+            cell = cell.parent;
+        }
+        if (!cell || !cell.attributes.hasClass("cctv-cell")) return;
+        if (cell.attributes.hasClass("empty")) return;
+        var peer_id = cell.attributes["id"].replace("cctv-cell-", "");
+        createNewConnect(peer_id, "connect");
+    }
+
+    event mouseup $(.cctv-cell) (evt) {
+        if (!evt.propButton) return false;
+        var cell = evt.target;
+        if (cell && !cell.attributes.hasClass("cctv-cell")) {
+            cell = cell.parent;
+        }
+        if (!cell || !cell.attributes.hasClass("cctv-cell")) return false;
+        if (cell.attributes.hasClass("empty")) return false;
+        
+        var video = cell.$(video);
+        if (!video) return false;
+        
+        var menu = $(menu#cctv-index-context-menu);
+        if (!menu) {
+            $(body).append(<popup><menu.context id="cctv-index-context-menu">
+                <li id="cctv-index-reboot">{translate('Restart remote device')} (재부팅)</li>
+                <li id="cctv-index-file-transfer">파일전송</li>
+            </menu></popup>);
+            menu = $(menu#cctv-index-context-menu);
+            
+            $(body).on("click", "li#cctv-index-reboot", function(e) {
+                var v = menu.video_target;
+                if (v) {
+                    msgbox(
+                        "restart-confirmation",
+                        translate("Restart remote device") + " (재부팅)",
+                        translate("Are you sure you want to restart") + " ?",
+                        "",
+                        function(res=null) {
+                            if (res != null) {
+                                v.restart_remote_device();
+                            }
+                        }
+                    );
+                }
+            });
+            $(body).on("click", "li#cctv-index-file-transfer", function(e) {
+                var v = menu.video_target;
+                if (v && menu.peer_id) {
+                    handler.new_remote(menu.peer_id, "file-transfer", false);
+                }
+            });
+        }
+        menu.video_target = video;
+        menu.peer_id = cell.attributes["id"].replace("cctv-cell-", "");
+        cell.popup(menu);
+        return true;
     }
 
     function newRemote(type) {
@@ -986,20 +1311,11 @@ function watch_screen_recording() {
 
 class PasswordEyeArea : Reactor.Component {
     render() {
-        var method = handler.get_option('verification-method');
-        var mode= handler.get_option('approve-mode');
-        var hide_one_time = mode == 'click' ||  method == 'use-permanent-password';
-        var value = hide_one_time ? "-" : password_cache[0];
+        var value = "-";
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
-                {hide_one_time ? "" : svg_refresh_password}
             </div>;
-    }
-
-    event click $(svg#refresh-password) (_, me) {
-        handler.update_temporary_password();
-        this.update();
     }
 }
 
@@ -1056,13 +1372,10 @@ class PasswordArea: Reactor.Component {
     }
 
     function render() {
-        var me = this;
-        self.timer(1ms, function() { me.toggleMenuState() });
         return 
         <div .your-desktop>
-            <div>{translate('One-time Password')}</div>
+            <div>{translate('Set permanent password')}</div>
             <div .password style="flow:horizontal">
-                {this.renderPop()}
                 <PasswordEyeArea />
                 {!disable_settings && svg_edit}
             </div>
@@ -1127,11 +1440,42 @@ class PasswordArea: Reactor.Component {
     }
 
     event click $(svg#edit) (_, me) {
-        var approve_mode= handler.get_option('approve-mode');
-        var show_password = approve_mode != 'click';
-        if(show_password && temporaryPasswordLengthMenu) temporaryPasswordLengthMenu.update({show: true });
-        var menu = $(menu#edit-password-context);        
-        me.popup(menu);
+        // Directly open set permanent password dialog
+        var me = this;
+        var has_local_password = handler.is_local_permanent_password_set();
+        var permanent_password_set = handler.is_permanent_password_set();
+        var password_hidden_tip = translate('password-hidden-tip');
+        var preset_password_tip = translate('preset-password-in-use-tip');
+        var password_tip = "";
+        if (has_local_password) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + password_hidden_tip + "</div>";
+        } else if (permanent_password_set) {
+            password_tip = "<div style='margin-top:0.5em; color:#e5a43a;'><span style='font-weight:bold;'>[!]</span> " + preset_password_tip + "</div>";
+        }
+        msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
+            " + password_tip + " \
+        </div> \
+        ", "", function(res=null) {
+            if (!res) return;
+            var p0 = (res.password || "").trim();
+            var p1 = (res.confirmation || "").trim();
+            if (p0.length == 0 && p1.length == 0) {
+                return " ";
+            }
+            if (p0.length < 6 && p0.length != 0) {
+                return translate("Too short, at least 6 characters.");
+            }
+            if (p0 != p1) {
+                return translate("The confirmation is not identical.");
+            }
+            handler.set_permanent_password(p0);
+            me.update();
+        }, msgbox_default_height, get_msgbox_width());
+        self.timer(30ms, function() {
+            updateSetPasswordSubmitState();
+        });
     }
 
     event click $(li#set-password) {
@@ -1379,16 +1723,11 @@ function self.closing() {
 
 function self.ready() {
     var r = handler.get_size();
-    if (isReasonableSize(r) && r[2] > 0) {
-        var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
-        if (r[2] >= sw && r[3] >= sh) {
-            self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
-        } else {
-            view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
-        }
-    } else {
-        centerize(scaleIt(incoming_only ? incoming_only_width : 800), scaleIt(incoming_only ? 390 : 600));
-    }
+    if (app) app.saved_window_size = r;
+    
+    // Default small login window geometry
+    centerize(scaleIt(360), scaleIt(460));
+    
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);
     }
@@ -1417,7 +1756,7 @@ function showSettings() {
 function checkConnectStatus() {
     handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
-        var tmp = handler.get_option("stop-service") == "Y";
+        var tmp = false;
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
@@ -1678,4 +2017,29 @@ function getHttpHeaders() {
 
 function getDeviceInfo() {
     return JSON.parse(handler.get_login_device_info());
+}
+
+function updateCctvLayout() {
+    var container = $(#cctv-grid-container);
+    if (!container) return;
+    
+    var base_w = app.cctv_cell_size || 300;
+    
+    var cell_w = base_w;
+    var cell_h = (cell_w * 9 / 16).toInteger();
+    
+    if (cell_w < 50) cell_w = 50;
+    if (cell_h < 30) cell_h = 30;
+    
+    app.cell_w = cell_w;
+    app.cell_h = cell_h;
+    
+    var cw_str = cell_w.toString() + "px";
+    var ch_str = cell_h.toString() + "px";
+    
+    // Update the DOM cell element sizes directly
+    for (var cell in $$(.cctv-cell)) {
+        cell.style#width = cw_str;
+        cell.style#height = ch_str;
+    }
 }
