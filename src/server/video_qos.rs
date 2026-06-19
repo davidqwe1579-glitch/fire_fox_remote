@@ -29,9 +29,9 @@ delay:
 
 // Constants
 pub const FPS: u32 = 30;
-pub const MIN_FPS: u32 = 1;
-pub const MAX_FPS: u32 = 120;
-pub const INIT_FPS: u32 = 15;
+pub const MIN_FPS: u32 = 30;
+pub const MAX_FPS: u32 = 240;
+pub const INIT_FPS: u32 = 60;
 
 // Bitrate ratio constants for different quality levels
 const BR_MAX: f32 = 40.0; // 2000 * 2 / 100

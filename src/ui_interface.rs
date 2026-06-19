@@ -1237,6 +1237,103 @@ pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn add_peer(id: String) {
+    let id = id.replace(" ", "");
+    if id.is_empty() {
+        return;
+    }
+    // Save as a peer with default config so it appears in recent sessions
+    let mut c = PeerConfig::load(&id);
+    c.info.username = "".to_owned();
+    c.store(&id);
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn new_file_transfer_auto(id: String, password: String, folder: String) {
+    let mut lock = CHILDREN.lock().unwrap();
+    let mut args = vec!["--file-transfer".to_string(), id.clone()];
+    if !password.is_empty() {
+        args.push(password);
+    }
+    if !folder.is_empty() {
+        args.push("--folder".to_string());
+        args.push(folder);
+    }
+    let key = (id.clone(), "file-transfer".to_string());
+    if let Some(c) = lock.1.get_mut(&key) {
+        if let Ok(Some(_)) = c.try_wait() {
+            lock.1.remove(&key);
+        } else {
+            return;
+        }
+    }
+    match crate::run_me(args) {
+        Ok(child) => {
+            lock.1.insert(key, child);
+        }
+        Err(err) => {
+            log::error!("Failed to spawn file transfer: {}", err);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn new_remote_cctv(id: String, remote_type: String, index: i32, total: i32) {
+    let mut lock = CHILDREN.lock().unwrap();
+    let args = vec![
+        format!("--{}", remote_type),
+        id.clone(),
+        "".to_string(), // password placeholder
+        format!("--cctv-index={}", index),
+        format!("--cctv-total={}", total),
+    ];
+    let key = (id.clone(), remote_type.clone());
+    if let Some(c) = lock.1.get_mut(&key) {
+        if let Ok(Some(_)) = c.try_wait() {
+            lock.1.remove(&key);
+        } else {
+            return;
+        }
+    }
+    match crate::run_me(args) {
+        Ok(child) => {
+            lock.1.insert(key, child);
+        }
+        Err(err) => {
+            log::error!("Failed to spawn CCTV remote: {}", err);
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "flutter")))]
+pub fn close_all_cctv() {
+    let mut lock = CHILDREN.lock().unwrap();
+    for (_, child) in lock.1.iter_mut() {
+        if let Err(e) = child.kill() {
+            log::warn!("Failed to kill child process: {}", e);
+        }
+    }
+    // Wait for children to actually exit
+    for (_, child) in lock.1.iter_mut() {
+        let start = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {
+                    if start.elapsed() > std::time::Duration::from_millis(1500) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => break,
+            }
+        }
+    }
+    lock.1.clear();
+    lock.0 = false;
+}
+
 // Make sure `SENDER` is inited here.
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

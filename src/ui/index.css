@@ -1,5 +1,13 @@
 html {
     background-color: transparent;
+    font-family: system-ui, sans-serif;
+    var(bg): #0a0a0f;
+    var(border): rgba(0, 255, 255, 0.2);
+    var(text): #ffffff;
+    var(light-text): #a0a0b0;
+    var(lighter-text): #666677;
+    var(accent): #00ffff;
+    var(gray-bg): #121218;
 }
 
 body {
@@ -14,6 +22,10 @@ body {
 
 .title {
     font-size: 1.4em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #00ffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
 .app {
@@ -23,19 +35,25 @@ body {
 
 .lighter-text {
     color: color(lighter-text);
-    font-size: 0.9em;
+    font-size: 0.85em;
+    line-height: 1.5em;
 }
 
+/* ═══════════════════════════════════════
+   LEFT PANEL - Modern Sidebar
+   ═══════════════════════════════════════ */
+
 .left-pane {
-    width: 200px;
+    width: 220px;
     height: *;
-    background: color(bg);
-    border-right: color(border) 1px solid;
+    background: linear-gradient(135deg, #09090b, #121218);
+    border-right: rgba(0, 255, 255, 0.1) 1px solid;
     position: relative;
+    color: #ffffff;
 }
 
 #ab .left-pane {
-    border-radius: 1em;
+    border-radius: 12px;
     padding: 1em;
 }
 
@@ -48,9 +66,9 @@ body {
 }
 
 .left-pane > div:nth-child(1) {
-    border-spacing: 1em;
-    padding: 20px;
-    padding-bottom: 60px; /* reserve space for bottom connect-status */
+    border-spacing: 1.2em;
+    padding: 24px;
+    padding-bottom: 60px;
 }
 
 .left-pane > div.connect-status {
@@ -64,6 +82,10 @@ body {
   word-wrap: break-word;
 }
 
+/* ═══════════════════════════════════════
+   SESSION TABS
+   ═══════════════════════════════════════ */
+
 div.sessions-bar {
     color: color(light-text);
     padding-top: 0.5em;
@@ -75,8 +97,9 @@ div.sessions-bar {
 
 div.sessions-tab span {
     display: inline-block;
-    padding: 6px 8px;
+    padding: 8px 12px;
     cursor: pointer;
+    border-radius: 8px;
     @ELLIPSIS;
 }
 
@@ -86,10 +109,15 @@ div.sessions-tab svg {
 
 div.sessions-tab span.active {
     cursor: default;
-    border-radius: 3px;
-    background: color(bg);
-    color: color(text);
+    border-radius: 8px;
+    background: color(accent);
+    color: #08080c;
+    font-weight: 800;
 }
+
+/* ═══════════════════════════════════════
+   SEARCH
+   ═══════════════════════════════════════ */
 
 div.search-id {
     width: 120px;
@@ -109,7 +137,7 @@ div.search-id span {
     position: absolute;
     top: 0px;
     padding: 6px;
-    color: color(border);
+    color: color(lighter-text);
 }
 
 div.search-id svg {
@@ -130,34 +158,55 @@ div.search-id:hover span.clear-input {
 }
 
 span.clear-input:hover {
-    color: black;
+    color: color(accent);
 }
+
+/* ═══════════════════════════════════════
+   YOUR DESKTOP - ID & PASSWORD AREA
+   ═══════════════════════════════════════ */
 
 .your-desktop {
     border-spacing: 0.5em;
-    border-left: color(accent) solid 2px;
-    padding-left: 0.5em;
+    border-left: #00ffff solid 3px;
+    padding-left: 0.8em;
+    border-radius: 0;
+    color: #ffffff;
 }
 
 .your-desktop input[type=text] {
     padding: 0;
     border: none;
-    height: 1.5em;
+    font-size: 1.1em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: transparent;
+    color: #00ffff;
+    text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+    vertical-align: middle;
 }
 
 .your-desktop > div {
-    color: color(light-text);
+    color: #a0a0b0;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
+
+/* ═══════════════════════════════════════
+   RIGHT PANEL
+   ═══════════════════════════════════════ */
 
 .right-pane {
     size: *;
-    background: color(gray-bg);
+    background: linear-gradient(to bottom, #161622, #0d0d15);
+    color: #ffffff;
 }
 
 .right-content {
     overflow: scroll-indicator;
-    padding: 1.6em;
-    border-spacing: 1.6em;
+    padding: 2em;
+    border-spacing: 2em;
     size: *;
     flow: vertical;
 }
@@ -168,39 +217,52 @@ span.clear-input:hover {
     }
 }
 
+/* ═══════════════════════════════════════
+   CONNECT CARD
+   ═══════════════════════════════════════ */
+
 @mixin CARD {
-    padding: 1.6em;
-    border-spacing: 1em;
-    background: color(bg);
-    border-radius: 1em;
+    padding: 2em;
+    border-spacing: 1.2em;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 16px;
+    border: rgba(0, 255, 255, 0.2) solid 1px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    color: #ffffff;
 }
 
 .card-connect {
     @CARD;
-    width: 320px;
+    width: 360px;
 }
 
 .right-buttons {
     text-align: right;
+    border-spacing: 0.8em;
 }
 
 .right-buttons>button {
-    margin-left: 1.6em;
+    margin-left: 1em;
 }
+
+/* ═══════════════════════════════════════
+   CONNECTION STATUS
+   ═══════════════════════════════════════ */
 
 div.connect-status {
     left: 240px;
     border-top: color(border) solid 1px;
     width: 100%;
-    padding: 1em;
+    padding: 12px 16px;
+    font-size: 0.85em;
 }
 
 div.connect-status > span.connect-status-icon {
-    border-radius: 4px;
+    border-radius: 50%;
     width: 8px;
     height: 8px;
     display: inline-block;
-    margin-right: 1em;
+    margin-right: 0.8em;
 }
 
 div.connect-status > span.link {
@@ -209,78 +271,118 @@ div.connect-status > span.link {
 }
 
 span.connect-status-1 {
-    background: #e04f5f;
+    background: #e74c5e;
 }
 
 span.connect-status1 {
-    background: #32bea6;
+    background: #27ae60;
 }
 
 span.connect-status0 {
-    background: #F5853B;
+    background: #f0b429;
 }
+
+/* ═══════════════════════════════════════
+   REMOTE SESSION CARDS - VERTICAL ROW LAYOUT
+   ═══════════════════════════════════════ */
 
 div.recent-sessions-content {
-    border-spacing: 1em;
-    flow: horizontal-flow;
+    border-spacing: 8px;
+    flow: vertical;
+    size: *;
 }
 
+/* ── Tile view as rows ── */
+
 div.remote-session {
-    border-radius: 1em;
-    height: 140px;
-    width: 220px;
+    border-radius: 12px;
+    height: 56px;
+    width: *;
     padding: 0;
     position: relative;
-    border: none;
+    border: rgba(0, 255, 255, 0.15) solid 1px;
+    overflow: hidden;
+    flow: horizontal;
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
 div.remote-session:hover, div.remote-session-list:hover {
-    outline: color(button) solid 2px -2px;
+    border-color: #00ffff;
+    outline: none;
+    background: rgba(0, 255, 255, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 255, 255, 0.2);
 }
 
 div.remote-session .platform {
-    width: *;
-    height: 120px;
+    width: 56px;
+    height: 56px;
     padding: *;
     position: relative;
+    border-radius: 12px 0 0 12px;
 }
 
-div.remote-session .platform .username{
-    left: 0;
-    color: #eee;
-    position: absolute;
-    bottom: 38px;
-    font-size: 0.8em;
-    width: 220px;
-    text-align: center;
+div.remote-session .platform .username {
+    display: none;
 }
 
 div.remote-session .platform svg {
-    width: 60px;
-    height: 60px;
+    width: 32px;
+    height: 32px;
     background: none;
 }
 
-div.remote-session-list {
-    background: color(bg);
-    width: 220px;
+div.remote-session .text {
+    background: none;
+    position: relative;
+    height: *;
+    width: *;
+    border-radius: 0;
+    bottom: auto;
     flow: horizontal;
+    padding-left: 0.8em;
+}
+
+div.remote-session .text > div {
+    padding-top: 0;
+    padding-left: 0;
+    width: *;
+    font-weight: 600;
+    font-size: 0.95em;
+    margin-top: *;
+    margin-bottom: *;
+}
+
+/* ── List view as rows ── */
+
+div.remote-session-list {
+    background: rgba(255, 255, 255, 0.05);
+    width: *;
+    height: 52px;
+    flow: horizontal;
+    border-radius: 12px;
+    border: rgba(0, 255, 255, 0.15) solid 1px;
+    color: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
 div.remote-session-list .platform {
-    size: 42px;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px 0 0 12px;
 }
 
 div.remote-session-list .platform svg {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     background: none;
-    padding: 6px;
+    padding: 12px;
 }
 
 div.remote-session-list .name {
     size: *;
-    padding-left: 1em;
+    padding-left: 0.8em;
 }
 
 div.remote-session-list .name >div {
@@ -289,34 +391,29 @@ div.remote-session-list .name >div {
     width: *;
 }
 
+div.remote-session-list .name #alias {
+    font-weight: 600;
+    font-size: 0.95em;
+}
+
 div.remote-session-list .name .username {
-    margin-top: 3px;
-    font-size: 0.8em;
+    display: block;
     color: color(lighter-text);
+    font-size: 0.8em;
+    margin-top: 2px;
 }
 
-div.remote-session .text {
-    background: color(bg);
-    position: absolute;
-    height: 3em;
-    width: 100%;
-    border-radius: 0 0 1em 1em;
-    bottom: 0;
-    flow: horizontal;
-}
-
-div.remote-session .text > div {
-    padding-top: 1em;
-    padding-left: 1em;
-    width: *;
-}
+/* ═══════════════════════════════════════
+   3-DOT MENU ICON
+   ═══════════════════════════════════════ */
 
 svg#menu {
     size: 1em;
     background: none;
     padding: 0.5em;
     margin: 0.5em;
-    color: color(light-text);
+    color: color(lighter-text);
+    border-radius: 8px;
 }
 
 .remote-session-list svg#menu {
@@ -325,50 +422,65 @@ svg#menu {
 
 svg#menu:hover {
     color: color(text);
-    border-radius: 1em;
+    border-radius: 8px;
     background: color(gray-bg);
 }
 
+/* ═══════════════════════════════════════
+   EDIT / PASSWORD ICON
+   ═══════════════════════════════════════ */
+
 svg#edit:hover {
-    color: color(text);
+    color: color(accent);
 }
 
 svg#edit {
     display: inline-block;
 }
 
+/* ═══════════════════════════════════════
+   INSTALL / TRUST BANNERS
+   ═══════════════════════════════════════ */
+
 div.install-me, div.trust-me {
-    margin-top: 0.5em;
+    margin-top: 0.8em;
     padding: 20px;
-    color: white;
-    background: linear-gradient(left,#e242bc,#f4727c);
+    color: #00ffff;
+    background: rgba(0, 255, 255, 0.08);
+    border: 1px solid rgba(0, 255, 255, 0.4);
+    border-radius: 12px;
 }
 
 div.trust-me > div:nth-child(1),
 div.install-me > div:nth-child(1) {
-    font-size: 1.2em;
+    font-size: 1.1em;
     font-weight: bold;
     text-align: center;
     margin-bottom: 0.5em;
 }
 
 div.install-me > div:nth-child(2) {
-    line-height: 1.4em;
+    line-height: 1.5em;
+    opacity: 0.9;
 }
 
 #install-me.link {
     margin-top: 0.5em;
+    color: #00ffff;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
 }
 
 div.trust-me > div:nth-child(2) {
     font-size: 0.9em;
     margin-bottom: 1em;
+    opacity: 0.9;
 }
 
 div.install-me > div:nth-child(3),
 div.trust-me > div:nth-child(3) {
     text-align: center;
-    font-size: 1.5em;
+    font-size: 1.4em;
     font-weight: bold;
 }
 
@@ -378,8 +490,14 @@ div.trust-me > div:nth-child(5) {
     text-align: center;
 }
 
+/* ═══════════════════════════════════════
+   MY ID AREA
+   ═══════════════════════════════════════ */
+
 div#myid, div#tags-label {
     position: relative;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 div#myid svg#menu, div#tags-label svg#menu {
@@ -388,7 +506,7 @@ div#myid svg#menu, div#tags-label svg#menu {
 }
 
 div#tags-label svg#menu:hover {
-    background-color: #ddd;
+    background-color: color(gray-bg);
 }
 
 div.remote-session svg#menu {
@@ -404,38 +522,208 @@ div.remote-session svg#menu {
     font-weight: bold;
     font-size: 1em;
     margin-top: 1em;
-    border-color: white;
+    border-color: #00ffff;
     border: 1px;
     background: none;
-    color: white;
+    color: #00ffff;
+    border-radius: 8px;
 }
+
+/* ═══════════════════════════════════════
+   PASSWORD REFRESH ICON
+   ═══════════════════════════════════════ */
 
 svg#refresh-password {
     display: inline-block;
-    stroke:#ddd;
+    stroke: color(lighter-text);
 }
 
 svg#refresh-password:hover {
-    stroke:color(text);
+    stroke: color(accent);
 }
+
+/* ═══════════════════════════════════════
+   DISABLED MENU ITEMS
+   ═══════════════════════════════════════ */
 
 li:disabled, li:disabled:hover {
     color: color(lighter-text);
-    background: color(menu);
-    opacity: 0.8;
+    background: transparent;
+    opacity: 0.6;
 }
 
 .grey-text {
-    color: #888 !important;
+    color: color(lighter-text) !important;
 }
 
 input.grey-text,
 textarea.grey-text {
-    color: #888 !important;
+    color: color(lighter-text) !important;
 }
 
 @media platform == "OSX" {
     div.eye-area > input {
         font-size: 1em;
     }
+}
+
+/* ═══════════════════════════════════════
+   CCTV GRID
+   ═══════════════════════════════════════ */
+
+#cctv-grid-container {
+    size: *;
+    flow: horizontal-flow;
+    border-spacing: 3px;
+    background: #080808;
+    border-radius: 8px;
+    padding: 3px;
+    overflow-y: auto;
+}
+
+.cctv-cell {
+    display: block;
+    background: #0d0d12;
+    border: 1px solid #2a2a35;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    margin: 5px;
+    flow: vertical;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
+}
+
+.cctv-cell:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(0, 255, 255, 0.2);
+    border: 1px solid #00ffff;
+}
+
+.cctv-cell.empty {
+    background: linear-gradient(135deg, #0f0f15, #1a1a24);
+    border: 1px dashed #3a3a45;
+}
+
+.cctv-label {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    background: rgba(10, 10, 15, 0.75);
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: #00ffff;
+    font-size: 0.7em;
+    font-weight: 600;
+    z-index: 10;
+    font-family: system-ui, sans-serif;
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.cctv-cell video {
+    behavior: native-remote video;
+    size: *;
+    margin: 0;
+    padding: 0;
+    foreground-size: contain;
+    background: transparent;
+    border-radius: 12px;
+}
+
+.cctv-cell.selected {
+    outline: 2px solid #00ffff;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+    z-index: 20;
+}
+
+/* CCTV Button Overrides */
+button.button { background: linear-gradient(135deg, #00c6ff, #0072ff); color: white; border: none; box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4); text-shadow: none; font-weight: 700; border-radius: 8px; }
+button.button:hover { background: linear-gradient(135deg, #0072ff, #00c6ff); box-shadow: 0 6px 20px rgba(0, 114, 255, 0.6); }
+button.outline { background: transparent; border: 1px solid #00ffff; color: #00ffff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.2); font-weight: 700; border-radius: 8px; }
+button.outline:hover { background: rgba(0, 255, 255, 0.1); border-color: #00ffff; box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
+
+/* Dashboard App Layout */
+.dashboard-app {
+    flow: vertical;
+    size: *;
+    background: linear-gradient(to bottom, #101018, #08080c);
+    color: #ffffff;
+}
+
+.top-header {
+    flow: horizontal;
+    height: 60px;
+    padding: 0 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    align-items: center;
+}
+
+.brand-title {
+    font-size: 1.4em;
+    font-weight: 800;
+    color: #00ffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+    margin-right: *;
+}
+
+.top-nav-items {
+    flow: horizontal;
+    align-items: center;
+    border-spacing: 15px;
+}
+
+.main-content {
+    flow: vertical;
+    size: *;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.hero-connect-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    padding: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.4);
+}
+
+.hero-connect-section .title {
+    font-size: 1.5em;
+    margin-bottom: 15px;
+}
+
+.connect-inputs > input {
+    width: 250px;
+    height: 38px;
+    font-size: 1.2em;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    background: rgba(0,0,0,0.3);
+    color: #00ffff;
+}
+
+.sessions-grid-section {
+    size: *;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 16px;
+    border: 1px solid rgba(0, 255, 255, 0.1);
+    padding: 20px;
+}
+
+/* Adjust MultipleSessions to grid */
+.recent-sessions-content {
+    flow: horizontal-flow;
+    border-spacing: 15px;
+    size: *;
+}
+
+div.remote-session, div.remote-session-list {
+    width: 220px;
+    height: 60px;
 }

@@ -10,7 +10,7 @@ pub trait FileManager: Interface {
         feature = "flutter"
     )))]
     fn get_home_dir(&self) -> String {
-        fs::get_home_as_string()
+        fs::get_desktop_as_string()
     }
 
     #[cfg(not(any(
