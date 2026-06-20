@@ -2293,6 +2293,7 @@ function updateCctvLayout() {
     var is_auto_fit = app.cctv_auto_fit !== false;
     var cell_w, cell_h;
     if (is_auto_fit) {
+        var best_cols = 1;
         var best_w = 50;
         for (var cols = 1; cols <= total; ++cols) {
             var rows = Math.ceil(total.toFloat() / cols.toFloat()).toInteger();
@@ -2300,9 +2301,13 @@ function updateCctvLayout() {
             var max_w_by_height = (((ch - 20) / rows.toFloat()) - 35) * 16.0 / 9.0 - 6;
             
             var w = max_w_by_width < max_w_by_height ? max_w_by_width : max_w_by_height;
-            if (w > best_w) best_w = w.toInteger();
+            if (w > best_w) {
+                best_w = w.toInteger();
+                best_cols = cols;
+            }
         }
-        cell_w = best_w;
+        var safe_cw = cw - 24;
+        cell_w = (safe_cw / best_cols).toInteger() - 2;
         cell_h = (cell_w * 9 / 16).toInteger() + 35;
     } else {
         var base_w = app.cctv_cell_size || 300;
