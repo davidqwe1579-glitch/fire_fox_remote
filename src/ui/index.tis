@@ -1126,7 +1126,7 @@ class App: Reactor.Component
             return;
         }
         msgbox("restart-confirmation", "모든 컴퓨터 재부팅", "정말 모든 컴퓨터를 재부팅하시겠습니까?", "", function(res=null) {
-            if (res != null) {
+            if (res == #ok || res == "ok" || res == #yes || res == "yes") {
                 for (var v in videos) {
                     if (v.restart_remote_device) {
                         v.restart_remote_device();
