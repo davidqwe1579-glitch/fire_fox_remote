@@ -175,7 +175,6 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                             is_manager: client_is_manager,
                             disconnect_tx,
                         });
-                        // Store the actual number of active connections (no off‑by‑one adjustment)
                         // Total active connections (including manager)
                         let _total_count = conns_list.len() as i32;
                         let db_count = conns_list.iter().filter(|c| !c.is_manager).count() as i32;
@@ -183,17 +182,37 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 
                         // Update DB with the current active connection count and manager status
                         if client_is_manager {
-                            // Only set manager flag; do not modify current_connections
-                            let _ = sqlx::query("UPDATE user SET manager_logged_in = 1 WHERE user_id = ?")
+                            // Update manager flag and log result
+                            let result = sqlx::query("UPDATE user SET manager_logged_in = 1 WHERE user_id = ?")
                                 .bind(&user_id)
                                 .execute(&state.db)
                                 .await;
+                            match result {
+                                Ok(_) => {
+                                    // Verify flag after update
+                                    let flag: i32 = sqlx::query_scalar(
+                                        "SELECT manager_logged_in FROM user WHERE user_id = ?"
+                                    )
+                                        .bind(&user_id)
+                                        .fetch_one(&state.db)
+                                        .await
+                                        .unwrap_or(0);
+                                    eprintln!("[DEBUG] manager_logged_in set to {} for user {}", flag, user_id);
+                                }
+                                Err(e) => {
+                                    eprintln!("[ERROR] Failed to set manager_logged_in: {}", e);
+                                }
+                            }
                         } else {
-                            let _ = sqlx::query("UPDATE user SET current_connections = ? WHERE user_id = ?")
+                            // Update normal connection count
+                            let result = sqlx::query("UPDATE user SET current_connections = ? WHERE user_id = ?")
                                 .bind(db_count)
                                 .bind(&user_id)
                                 .execute(&state.db)
                                 .await;
+                            if let Err(e) = result {
+                                eprintln!("[ERROR] Failed to update current_connections: {}", e);
+                            }
                         }
                         
                         let resp = AuthResponse {
