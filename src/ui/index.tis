@@ -1205,14 +1205,10 @@ class App: Reactor.Component
             this.cctv_drag_source_idx = -1;
             
             if (swap_idx >= 0 && swap_idx < this.cctv_sessions.length && swap_idx != original_source_idx) {
-                var item = this.cctv_sessions[original_source_idx];
-                this.cctv_sessions.remove(original_source_idx);
-                
-                if (swap_idx >= this.cctv_sessions.length) {
-                    this.cctv_sessions.push(item);
-                } else {
-                    this.cctv_sessions.insert(swap_idx, item);
-                }
+                var item1 = this.cctv_sessions[original_source_idx];
+                var item2 = this.cctv_sessions[swap_idx];
+                this.cctv_sessions[original_source_idx] = item2;
+                this.cctv_sessions[swap_idx] = item1;
                 
                 var order = [];
                 for (var s in this.cctv_sessions) {
@@ -1220,8 +1216,11 @@ class App: Reactor.Component
                 }
                 handler.set_option("recent_order", JSON.stringify(order));
                 
-                this.update();
-                self.timer(10ms, updateCctvLayout);
+                var self_app = this;
+                self.timer(10ms, function() {
+                    self_app.update();
+                    updateCctvLayout();
+                });
             }
         }
     }
