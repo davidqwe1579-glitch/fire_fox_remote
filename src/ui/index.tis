@@ -1105,7 +1105,7 @@ class App: Reactor.Component
                             v.is_closed = false;
                             if (v.reconnect) v.reconnect(false);
                         } else if (v.refresh_video) {
-                            v.refresh_video(-1);
+                            // v.refresh_video(-1); // This causes a native crash in CCTV mode
                         }
                     }
                 }
@@ -1132,8 +1132,7 @@ class App: Reactor.Component
         }
         msgbox("restart-confirmation", "모든 컴퓨터 재부팅", "정말 모든 컴퓨터를 재부팅하시겠습니까?", "", function(res=null) {
             if (res == #ok || res == "ok" || res == #yes || res == "yes") {
-                for (var i = 0; i < videos.length; ++i) {
-                    var v = videos[i];
+                for (var v in videos) {
                     if (typeof v.restart_remote_device == #function) {
                         v.restart_remote_device();
                     }
