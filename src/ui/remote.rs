@@ -583,6 +583,8 @@ impl sciter::EventHandler for SciterSession {
         fn has_file_clipboard();
         fn get_printer_names();
         fn on_printer_selected(i32, String, String);
+        fn is_connected();
+        fn is_connecting();
     }
 }
 
@@ -622,6 +624,14 @@ impl SciterSession {
 
     pub fn inner(&self) -> Session<SciterHandler> {
         self.0.clone()
+    }
+
+    fn is_connected(&self) -> bool {
+        self.0.is_connected()
+    }
+
+    fn is_connecting(&self) -> bool {
+        self.0.is_connecting()
     }
 
     fn get_custom_image_quality(&mut self) -> Value {

@@ -163,6 +163,7 @@ pub fn start(args: &mut [String]) {
             log::info!("[CCTV] creating session for peer: {}", id);
             let mut args = vec![];
             args.push("--cctv".to_string());
+            args.push("--relay".to_string());
             let handler = remote::SciterSession::new(
                 "--connect".to_string(),
                 id,
@@ -512,6 +513,8 @@ impl UI {
             p.info.hostname.clone(),
             p.info.platform.clone(),
             p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+            p.options.get("boot_time").unwrap_or(&"".to_owned()).to_owned(),
+            p.options.get("uptime").unwrap_or(&"".to_owned()).to_owned(),
         ];
         Value::from_iter(values)
     }
@@ -660,7 +663,7 @@ impl UI {
         crate::ui_interface::account_auth_result()
     }
 
-    fn auth_login(&mut self, user_id: String) -> String {
+    fn auth_login(&mut self, user_id: String, is_manager: String) -> String {
         let rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             
@@ -680,23 +683,27 @@ impl UI {
                         "user_id": user_id,
                         "uuid": hbb_common::config::Config::get_id(),
                         "session_id": *SESSION_ID,
+                        "is_manager": is_manager == "Y",
                     });
                     if ws_stream.send(Message::Text(req.to_string().into())).await.is_err() {
                         return "Failed to send login request".to_string();
                     }
 
-                    if let Some(Ok(Message::Text(msg))) = ws_stream.next().await {
+                    let expire_date = if let Some(Ok(Message::Text(msg))) = ws_stream.next().await {
                         let resp: serde_json::Value = serde_json::from_str(msg.to_string().as_str()).unwrap_or_default();
+                        println!("Auth server response JSON: {:?}", resp);
                         if resp["status"] != "OK" {
                             return resp["message"].as_str().unwrap_or("Login failed").to_string();
                         }
+                        resp["expire_date"].as_str().unwrap_or("").to_string()
                     } else {
                         return "No response from auth server".to_string();
-                    }
+                    };
 
                     // Connected and verified, spawn background thread to listen for EXPIRED
                     let url_clone = url.clone();
                     let user_id_clone = user_id.clone();
+                    let is_manager_clone = is_manager.clone();
                     std::thread::spawn(move || {
                         let bg_rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
                         bg_rt.block_on(async move {
@@ -706,25 +713,7 @@ impl UI {
                                     if let Ok(Message::Text(text)) = msg {
                                         let resp: serde_json::Value = serde_json::from_str(text.to_string().as_str()).unwrap_or_default();
                                         if resp["status"] == "ERROR" {
-                                            let msg_str = resp["message"].as_str().unwrap_or("Session terminated");
-                                            if msg_str == "EVICTED" {
-                                                std::process::exit(0);
-                                            }
-                                            #[cfg(windows)]
-                                            {
-                                                if let Some(main_hwnd) = *MAIN_HWND.lock().unwrap() {
-                                                    unsafe {
-                                                        winapi::um::winuser::ShowWindow(main_hwnd as _, winapi::um::winuser::SW_HIDE);
-                                                    }
-                                                }
-                                                unsafe {
-                                                    use std::os::windows::ffi::OsStrExt;
-                                                    let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
-                                                    let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                                    winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
-                                                }
-                                            }
-                                            std::process::exit(0);
+                                            exit_client(0);
                                         }
                                     }
                                 }
@@ -739,6 +728,7 @@ impl UI {
                                                 "user_id": user_id_clone,
                                                 "uuid": hbb_common::config::Config::get_id(),
                                                 "session_id": *SESSION_ID,
+                                                "is_manager": is_manager_clone == "Y",
                                             });
                                             if new_ws_stream.send(Message::Text(req.to_string().into())).await.is_ok() {
                                                 if let Some(Ok(Message::Text(msg))) = new_ws_stream.next().await {
@@ -748,25 +738,7 @@ impl UI {
                                                         log::info!("Successfully reconnected to auth server!");
                                                         break;
                                                     } else {
-                                                        let msg_str = resp["message"].as_str().unwrap_or("Session expired during reconnect");
-                                                        if msg_str == "EVICTED" {
-                                                            std::process::exit(0);
-                                                        }
-                                                        #[cfg(windows)]
-                                                        {
-                                                            if let Some(main_hwnd) = *MAIN_HWND.lock().unwrap() {
-                                                                unsafe {
-                                                                    winapi::um::winuser::ShowWindow(main_hwnd as _, winapi::um::winuser::SW_HIDE);
-                                                                }
-                                                            }
-                                                            unsafe {
-                                                                use std::os::windows::ffi::OsStrExt;
-                                                                let wide: Vec<u16> = std::ffi::OsStr::new(msg_str).encode_wide().chain(std::iter::once(0)).collect();
-                                                                let title: Vec<u16> = std::ffi::OsStr::new("Error").encode_wide().chain(std::iter::once(0)).collect();
-                                                                winapi::um::winuser::MessageBoxW(std::ptr::null_mut(), wide.as_ptr(), title.as_ptr(), 0x10);
-                                                            }
-                                                        }
-                                                        std::process::exit(0);
+                                                        exit_client(0);
                                                     }
                                                 }
                                             }
@@ -780,7 +752,11 @@ impl UI {
                         });
                     });
 
-                    "OK".to_string()
+                    if !expire_date.is_empty() {
+                        format!("OK|{}", expire_date)
+                    } else {
+                        "OK".to_string()
+                    }
                 }
                 Ok(Err(e)) => {
                     format!("Connection failed to {}: {}", url, e)
@@ -1054,7 +1030,7 @@ impl sciter::EventHandler for UI {
         fn account_auth(String, String, String, bool);
         fn account_auth_cancel();
         fn account_auth_result();
-        fn auth_login(String);
+        fn auth_login(String, String);
         fn send_wol(String);
         fn remove_peer(String);
         fn add_peer(String);
@@ -1179,5 +1155,42 @@ pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
 }
 
 pub fn get_icon() -> String {
-    "data:image/png;base64,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".to_string()
+    "data:image/png;base64,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".to_string()
+}
+
+pub fn kill_all_connection_processes() {
+    use hbb_common::sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let my_pid = std::process::id();
+    let app_name = crate::get_app_name().to_lowercase();
+    log::info!("kill_all_connection_processes: app_name = {}", app_name);
+    for (pid, p) in sys.processes().iter() {
+        let p_pid = pid.as_u32();
+        if p_pid == my_pid {
+            continue;
+        }
+        let p_name = p.name().to_lowercase();
+        if p_name == app_name || p_name == format!("{}.exe", app_name) {
+            let cmd = p.cmd();
+            let is_connection_proc = cmd.iter().any(|arg| {
+                arg == "--connect"
+                    || arg == "--file-transfer"
+                    || arg == "--port-forward"
+                    || arg == "--rdp"
+                    || arg == "--cm"
+                    || arg == "--cm-no-ui"
+                    || arg == "--view-camera"
+            });
+            if is_connection_proc {
+                log::info!("Killing connection process: pid = {}, cmd = {:?}", p_pid, cmd);
+                p.kill();
+            }
+        }
+    }
+}
+
+pub fn exit_client(code: i32) -> ! {
+    kill_all_connection_processes();
+    std::process::exit(code);
 }

@@ -219,6 +219,44 @@ class DesktopTabController {
   Widget? widget(String key) {
     return state.value.tabs.firstWhereOrNull((tab) => tab.key == key)?.page;
   }
+
+  void reorder(int oldIndex, int newIndex) {
+    if (!isDesktop) return;
+    final len = state.value.tabs.length;
+    if (oldIndex < 0 || oldIndex > len - 1) return;
+    if (newIndex < 0 || newIndex > len - 1) return;
+    if (oldIndex == newIndex) return;
+
+    state.update((val) {
+      if (val != null) {
+        final tab = val.tabs.removeAt(oldIndex);
+        val.tabs.insert(newIndex, tab);
+
+        // Adjust the selected index to keep the active tab active
+        final currentSelected = val.selected;
+        if (currentSelected == oldIndex) {
+          val.selected = newIndex;
+        } else if (oldIndex < currentSelected && currentSelected <= newIndex) {
+          val.selected -= 1;
+        } else if (newIndex <= currentSelected && currentSelected < oldIndex) {
+          val.selected += 1;
+        }
+
+        // Recreate PageController synchronously with the correct initialPage.
+        // This prevents state disposal and native exception crashes (0xc000041d)
+        // that arise from calling jumpToPage in a layout/gesture callback.
+        final oldController = val.pageController;
+        val.pageController = PageController(initialPage: val.selected);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            oldController.dispose();
+          } catch (e) {
+            debugPrint("Failed to dispose old pageController: $e");
+          }
+        });
+      }
+    });
+  }
 }
 
 class TabThemeConf {
@@ -559,7 +597,20 @@ class _DesktopTabState extends State<DesktopTab>
               /// to-do refactor, separate connection state and UI state for remote session.
               /// [workaround] PageView children need an immutable list, after it has been passed into PageView
               final tabLen = state.value.tabs.length;
-              if (tabLen == _tabWidgets.length) {
+              final newList = state.value.tabs.map((v) => v.page).toList();
+              bool isSameOrder = true;
+              if (newList.length == _tabWidgets.length) {
+                for (int i = 0; i < newList.length; i++) {
+                  if (newList[i].key != _tabWidgets[i].key) {
+                    isSameOrder = false;
+                    break;
+                  }
+                }
+              } else {
+                isSameOrder = false;
+              }
+
+              if (isSameOrder) {
                 return _tabWidgets;
               } else if (_tabWidgets.isNotEmpty &&
                   tabLen == _tabWidgets.length + 1) {
@@ -568,9 +619,8 @@ class _DesktopTabState extends State<DesktopTab>
                 _tabWidgets.add(state.value.tabs.last.page);
                 return _tabWidgets;
               } else {
-                /// On remove or change. Use new list(pointer) to reload list children so that items loading order is normal.
+                /// On remove or change (including reorder). Use new list(pointer) to reload list children so that items loading order is normal.
                 /// the Widgets in list must enable [AutomaticKeepAliveClientMixin]
-                final newList = state.value.tabs.map((v) => v.page).toList();
                 _tabWidgets = newList;
                 return newList;
               }
@@ -917,7 +967,7 @@ Future<bool> closeConfirmDialog() async {
   return res == true;
 }
 
-class _ListView extends StatelessWidget {
+class _ListView extends StatefulWidget {
   final DesktopTabController controller;
   final RxList<String> invisibleTabKeys;
 
@@ -928,8 +978,6 @@ class _ListView extends StatelessWidget {
   final Color? selectedTabBackgroundColor;
   final Color? selectedBorderColor;
   final Color? unSelectedTabBackgroundColor;
-
-  Rx<DesktopTabState> get state => controller.state;
 
   _ListView({
     required this.controller,
@@ -943,82 +991,170 @@ class _ListView extends StatelessWidget {
     this.selectedBorderColor,
   });
 
+  @override
+  State<_ListView> createState() => _ListViewState();
+}
+
+class _ListViewState extends State<_ListView> {
+  String? draggingKey;
+  String? hoveredKey;
+
+  Rx<DesktopTabState> get state => widget.controller.state;
+
   /// Check whether to show ListView
   ///
   /// Conditions:
   /// - hide single item when only has one item (home) on [DesktopTabPage].
   bool isHideSingleItem() {
     return state.value.tabs.length == 1 &&
-            controller.tabType == DesktopTabType.main ||
-        controller.tabType == DesktopTabType.install;
+            widget.controller.tabType == DesktopTabType.main ||
+        widget.controller.tabType == DesktopTabType.install;
   }
 
   onVisibilityChanged(VisibilityInfo info) {
     final key = (info.key as ValueKey).value;
     if (info.visibleFraction < 0.75) {
-      if (!invisibleTabKeys.contains(key)) {
-        invisibleTabKeys.add(key);
+      if (!widget.invisibleTabKeys.contains(key)) {
+        widget.invisibleTabKeys.add(key);
       }
-      invisibleTabKeys.removeWhere((key) =>
-          controller.state.value.tabs.where((e) => e.key == key).isEmpty);
+      widget.invisibleTabKeys.removeWhere((key) =>
+          widget.controller.state.value.tabs.where((e) => e.key == key).isEmpty);
     } else {
-      invisibleTabKeys.remove(key);
+      widget.invisibleTabKeys.remove(key);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => ListView(
-        controller: state.value.scrollController,
-        scrollDirection: Axis.horizontal,
-        shrinkWrap: true,
-        physics: const BouncingScrollPhysics(),
-        children: isHideSingleItem()
-            ? List.empty()
-            : state.value.tabs.asMap().entries.map((e) {
-                final index = e.key;
-                final tab = e.value;
-                final label = labelGetter == null
-                    ? Rx<String>(tab.label)
-                    : labelGetter!(tab.label);
-                final child = VisibilityDetector(
-                  key: ValueKey(tab.key),
-                  onVisibilityChanged: onVisibilityChanged,
-                  child: _Tab(
-                    key: ValueKey(tab.key),
-                    index: index,
-                    tabInfoKey: tab.key,
-                    label: label,
-                    tabType: controller.tabType,
-                    selectedIcon: tab.selectedIcon,
-                    unselectedIcon: tab.unselectedIcon,
-                    closable: tab.closable,
-                    selected: state.value.selected,
-                    onClose: () {
-                      if (tab.onTabCloseButton != null) {
-                        tab.onTabCloseButton!();
-                      } else {
-                        controller.remove(index);
-                      }
-                    },
-                    onTap: () {
-                      controller.jumpTo(index);
-                      tab.onTap?.call();
-                    },
-                    tabBuilder: tabBuilder,
-                    tabMenuBuilder: tabMenuBuilder,
-                    maxLabelWidth: maxLabelWidth,
-                    selectedTabBackgroundColor: selectedTabBackgroundColor ??
-                        MyTheme.tabbar(context).selectedTabBackgroundColor,
-                    unSelectedTabBackgroundColor: unSelectedTabBackgroundColor,
-                    selectedBorderColor: selectedBorderColor,
-                  ),
-                );
-                return GestureDetector(
-                  onPanStart: (e) {},
-                  child: child,
-                );
-              }).toList()));
+    return Obx(() {
+      final actualTabs = widget.controller.state.value.tabs;
+      final List<TabInfo> visualTabs = List.from(actualTabs);
+
+      if (draggingKey != null && hoveredKey != null && draggingKey != hoveredKey) {
+        final dragIndex = visualTabs.indexWhere((t) => t.key == draggingKey);
+        final hoverIndex = visualTabs.indexWhere((t) => t.key == hoveredKey);
+        if (dragIndex != -1 && hoverIndex != -1) {
+          final dragTab = visualTabs.removeAt(dragIndex);
+          visualTabs.insert(hoverIndex, dragTab);
+        }
+      }
+
+      return GestureDetector(
+          onPanStart: (e) {}, // Consume pan start to prevent parent window dragging
+          child: ListView(
+              controller: state.value.scrollController,
+              scrollDirection: Axis.horizontal,
+              shrinkWrap: true,
+              physics: const BouncingScrollPhysics(),
+              children: isHideSingleItem()
+                  ? List.empty()
+                  : visualTabs.asMap().entries.map((e) {
+                      final visualIndex = e.key;
+                      final tab = e.value;
+                      final label = widget.labelGetter == null
+                          ? Rx<String>(tab.label)
+                          : widget.labelGetter!(tab.label);
+                      final actualIndex = actualTabs.indexOf(tab);
+
+                      final tabWidget = _Tab(
+                        key: ValueKey(tab.key),
+                        index: actualIndex,
+                        tabInfoKey: tab.key,
+                        label: label,
+                        tabType: widget.controller.tabType,
+                        selectedIcon: tab.selectedIcon,
+                        unselectedIcon: tab.unselectedIcon,
+                        closable: tab.closable,
+                        selected: state.value.selected,
+                        onClose: () {
+                          if (tab.onTabCloseButton != null) {
+                            tab.onTabCloseButton!();
+                          } else {
+                            widget.controller.remove(actualIndex);
+                          }
+                        },
+                        onTap: () {
+                          widget.controller.jumpTo(actualIndex);
+                          tab.onTap?.call();
+                        },
+                        tabBuilder: widget.tabBuilder,
+                        tabMenuBuilder: widget.tabMenuBuilder,
+                        maxLabelWidth: widget.maxLabelWidth,
+                        selectedTabBackgroundColor: widget.selectedTabBackgroundColor ??
+                            MyTheme.tabbar(context).selectedTabBackgroundColor,
+                        unSelectedTabBackgroundColor: widget.unSelectedTabBackgroundColor,
+                        selectedBorderColor: widget.selectedBorderColor,
+                      );
+                      final visibilityChild = VisibilityDetector(
+                        key: ValueKey(tab.key),
+                        onVisibilityChanged: onVisibilityChanged,
+                        child: tabWidget,
+                      );
+                      return DragTarget<String>(
+                        key: ValueKey(tab.key),
+                        onWillAccept: (data) {
+                          if (data != null && data != tab.key) {
+                            if (draggingKey != data || hoveredKey != tab.key) {
+                              setState(() {
+                                draggingKey = data;
+                                hoveredKey = tab.key;
+                              });
+                            }
+                          }
+                          return true;
+                        },
+                        onLeave: (data) {
+                          if (data == draggingKey && hoveredKey == tab.key) {
+                            setState(() {
+                              hoveredKey = null;
+                            });
+                          }
+                        },
+                        onAccept: (data) {
+                          if (data != null) {
+                            final dragIndex = actualTabs.indexWhere((t) => t.key == data);
+                            final hoverIndex = actualTabs.indexWhere((t) => t.key == tab.key);
+                            if (dragIndex != -1 && hoverIndex != -1) {
+                              widget.controller.reorder(dragIndex, hoverIndex);
+                            }
+                          }
+                          setState(() {
+                            draggingKey = null;
+                            hoveredKey = null;
+                          });
+                        },
+                        builder: (context, candidateData, rejectedData) {
+                          return Draggable<String>(
+                            data: tab.key,
+                            axis: Axis.horizontal,
+                            onDragStarted: () {
+                              setState(() {
+                                draggingKey = tab.key;
+                              });
+                            },
+                            onDragEnd: (details) {
+                              setState(() {
+                                draggingKey = null;
+                                hoveredKey = null;
+                              });
+                            },
+                            feedback: Material(
+                              type: MaterialType.transparency,
+                              child: Opacity(
+                                opacity: 0.8,
+                                child: tabWidget,
+                              ),
+                            ),
+                            childWhenDragging: Opacity(
+                              opacity: 0.3,
+                              child: visibilityChild,
+                            ),
+                            child: visibilityChild,
+                          );
+                        },
+                      );
+                    }).toList())));
+    });
   }
 }
 

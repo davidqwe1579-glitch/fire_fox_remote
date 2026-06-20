@@ -320,8 +320,11 @@ class SessionList: Reactor.Component {
             return <div style="margin: *; font-size: 1.6em; width: 100px; text-align: center;">{translate("Empty")}</div>;
         }
         var me = this;
-        sessions = sessions.map(function(x) { return me.getSession(x); });
-        return <div .recent-sessions-content key={sessions.length}>
+        var rows = [];
+        for (var i = 0; i < sessions.length; ++i) {
+            rows.push(me.getSessionRow(sessions[i], i + 1));
+        }
+        return <div .recent-sessions-table-wrapper key={sessions.length}>
             <popup>
                 <menu.context #remote-context>
                     <li #connect>{translate('Connect')}</li>
@@ -340,51 +343,104 @@ class SessionList: Reactor.Component {
                     {this.type == "ab" && <li #edit-tag>{translate('Edit Tag')}</li>}
                 </menu>
             </popup>
-            {sessions}
+            <table .sessions-table>
+                <thead>
+                    <tr>
+                        <th .col-no>순서</th>
+                        <th .col-name>이름 / ID</th>
+                        <th .col-os>OS</th>
+                        <th .col-user>사용자 정보</th>
+                        <th .col-boot>부팅/켜진 시간</th>
+                        <th .col-menu>관리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
         </div>;
     }
 
-    function getSession(s) {
+    function getSessionRow(s, num) {
         var id = s[0] || s.id || "";
         var username = s[1] || s.username || "";
         var hostname = s[2] || s.hostname || "";
         var platform = s[3] || s.platform || "";
         var alias = s[4] || s.alias || "";
-        if (this.style == "list") {
-            return <div .remote-session-link .remote-session-list id={id} platform={platform} title={alias ? "ID: " + id : ""}>
-                <div .platform style={"background:"+string2RGB(id+platform, 0.5)}>
-                    {platform && platformSvg(platform, "white")}
-                </div>
-                <div .name>
-                    <div>
-                        <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
-                        <div .username .ellipsis>{username}@{hostname}</div>
+        var boot_time = s[5] || "";
+        var uptime = s[6] || "";
+        var boot_info = "-";
+        if (boot_time != "" && uptime != "") {
+            boot_info = boot_time + " (" + uptime + ")";
+        } else if (boot_time != "") {
+            boot_info = boot_time;
+        } else if (uptime != "") {
+            boot_info = uptime;
+        }
+        return <tr .remote-session-row id={id} platform={platform} title={alias ? "ID: " + id : ""}>
+            <td .col-no>{num}</td>
+            <td .col-name #alias>{alias ? alias : formatId(id)}</td>
+            <td .col-os>
+                {platform ? 
+                    <div .platform-row>
+                        <div .platform-icon-wrapper style={"background:"+string2RGB(id+platform, 0.5)}>
+                            {platformSvg(platform, "white")}
+                        </div>
+                        <span .platform-text>{platform}</span>
                     </div>
-                </div>
-                <div>
+                : ""}
+            </td>
+            <td .col-user>{username}@{hostname}</td>
+            <td .col-boot>{boot_info}</td>
+            <td .col-menu>
+                <div .menu-btn-clicker>
                     {svg_menu}
                 </div>
-            </div>;
-        }
-        return <div .remote-session-link .remote-session id={id} platform={platform} title={alias ? "ID: " + id : ""} style={"background:"+string2RGB(id+platform, 0.5)}>
-            <div .platform>
-                {platform && platformSvg(platform, "white")}
-                <div .username .ellipsis>{username}@{hostname}</div>
-            </div>
-            <div .text>
-                <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
-                {svg_menu}
-            </div>
-        </div>;
+            </td>
+        </tr>;
     }
 
-    event dblclick $(div.remote-session-link) (evt, me) {
+    event click $(td#alias) (evt, me) {
+        var row = me.$p(.remote-session-row);
+        if (!row) return true;
+        var id = row.id;
+        var old_name = handler.get_peer_option(id, "alias");
+        var abPeer;
+        if (this.type == "ab") {
+            for (var v in ab.peers) {
+                if (v.id == id) {
+                    abPeer = v;
+                    old_name = v.alias || "";
+                }
+            }
+        }
+        msgbox("custom-rename", "Rename", "<div .form> \
+            <div><input|text name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
+            </div> \
+            ", "", function(res=null) {
+                if (!res) return;
+                var name = (res.name || "").trim();
+                if (name != old_name) {
+                    if (abPeer) {
+                        abPeer.alias = name;
+                        updateAb();
+                    }
+                    handler.set_peer_option(id, "alias", name);
+                }
+                app.update();
+            });
+        return true;
+    }
+
+    event dblclick $(tr.remote-session-row) (evt, me) {
         createNewConnect(me.id, "connect");
     }
     
     event click $(#menu) (_, me) {
-        var id = me.parent.parent.id;
-        var platform = me.parent.parent.attributes["platform"];
+        var row = me.$p(.remote-session-row);
+        if (!row) return;
+        var id = row.id;
+        var platform = row.attributes["platform"];
         this.$(#rdp).style.set{
             display: (platform == "Windows" && is_win) ? "block" : "none",
         };
@@ -410,7 +466,7 @@ class SessionList: Reactor.Component {
         }
         var conn = this.$(menu #connect);
         if (conn) {
-          var alias = me.parent.parent.$(#alias);
+          var alias = row.$(#alias);
           if (alias) {
             alias = alias.text.replace(' ', '');
             if (alias != id) {

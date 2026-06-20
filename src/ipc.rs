@@ -83,6 +83,18 @@ const IPC_TOKEN_RANDOM_BYTES: usize = IPC_TOKEN_LEN / 2;
 const _: () = assert!(IPC_TOKEN_LEN % 2 == 0);
 pub static EXIT_RECV_CLOSE: AtomicBool = AtomicBool::new(true);
 
+lazy_static::lazy_static! {
+    static ref HOST_USER_INFO: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+}
+
+pub fn get_host_user_info() -> String {
+    HOST_USER_INFO.lock().unwrap().clone()
+}
+
+pub fn set_host_user_info(info: &str) {
+    *HOST_USER_INFO.lock().unwrap() = info.to_string();
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 thread_local! {
     static USE_USER_MAIN_IPC: Cell<bool> = Cell::new(false);
@@ -873,6 +885,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = Some(Config::get_unlock_pin());
                 } else if name == "trusted-devices" {
                     value = Some(Config::get_trusted_devices_json());
+                } else if name == "user_info" {
+                    value = Some(get_host_user_info());
                 } else {
                     value = None;
                 }
@@ -903,6 +917,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     crate::audio_service::set_voice_call_input_device(Some(value), true);
                 } else if name == "unlock-pin" {
                     Config::set_unlock_pin(&value);
+                } else if name == "user_info" {
+                    set_host_user_info(&value);
                 } else {
                     return;
                 }

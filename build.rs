@@ -91,4 +91,6 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
     }
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=res/icon.ico");
 }
+// Force build.rs change to recompile resource icons.

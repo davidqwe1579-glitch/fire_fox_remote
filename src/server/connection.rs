@@ -1652,6 +1652,10 @@ impl Connection {
             platform_additions.insert("support_view_camera".into(), json!(true));
         }
 
+        let (boot_time, uptime) = crate::common::get_boot_time_and_uptime();
+        platform_additions.insert("boot_time".into(), json!(boot_time));
+        platform_additions.insert("uptime".into(), json!(uptime));
+
         #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         if !platform_additions.is_empty() {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
@@ -2449,6 +2453,27 @@ impl Connection {
             {
                 self.send_login_error(crate::client::LOGIN_MSG_OFFLINE)
                     .await;
+                return false;
+            }
+
+            let local_user_info_str = crate::ipc::get_host_user_info();
+            let local_username = serde_json::from_str::<serde_json::Value>(&local_user_info_str)
+                .ok()
+                .and_then(|x| x.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                .unwrap_or_default();
+            if local_username.is_empty() {
+                log::info!("Connection blocked: local user is not logged in");
+                self.send_login_error("원격지 컴퓨터가 로그인되어 있지 않습니다.").await;
+                return false;
+            }
+            if lr.my_username.is_empty() {
+                log::info!("Connection blocked: remote client is not logged in");
+                self.send_login_error("로그인된 사용자만 원격제어를 시도할 수 있습니다.").await;
+                return false;
+            }
+            if lr.my_username != local_username {
+                log::info!("Connection blocked: local user is '{}', but remote client is logged in as '{}'", local_username, lr.my_username);
+                self.send_login_error("다른 사용자의 원격제어 기기입니다. 연결할 수 없습니다.").await;
                 return false;
             }
 

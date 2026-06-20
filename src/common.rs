@@ -3005,3 +3005,104 @@ mod tests {
         assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
     }
 }
+
+pub fn get_boot_time_and_uptime() -> (String, String) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::time::{SystemTime, Duration};
+        unsafe {
+            let uptime_ms = winapi::um::sysinfoapi::GetTickCount64();
+            let uptime_secs = uptime_ms / 1000;
+            let now = SystemTime::now();
+            let boot_time = now - Duration::from_secs(uptime_secs);
+            
+            let boot_time_chrono: chrono::DateTime<chrono::Local> = boot_time.into();
+            let boot_time_str = boot_time_chrono.format("%Y-%m-%d %H:%M:%S").to_string();
+            
+            let days = uptime_secs / 86400;
+            let hours = (uptime_secs % 86400) / 3600;
+            let minutes = (uptime_secs % 3600) / 60;
+            
+            let uptime_str = if days > 0 {
+                format!("{}일 {}시간 {}분", days, hours, minutes)
+            } else if hours > 0 {
+                format!("{}시간 {}분", hours, minutes)
+            } else {
+                format!("{}분", minutes)
+            };
+            
+            (boot_time_str, uptime_str)
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::time::{SystemTime, Duration};
+        if let Ok(uptime_str) = std::fs::read_to_string("/proc/uptime") {
+            if let Some(uptime_val_str) = uptime_str.split_whitespace().next() {
+                if let Ok(uptime_secs_f) = uptime_val_str.parse::<f64>() {
+                    let uptime_secs = uptime_secs_f as u64;
+                    let now = SystemTime::now();
+                    let boot_time = now - Duration::from_secs(uptime_secs);
+                    
+                    let boot_time_chrono: chrono::DateTime<chrono::Local> = boot_time.into();
+                    let boot_time_str = boot_time_chrono.format("%Y-%m-%d %H:%M:%S").to_string();
+                    
+                    let days = uptime_secs / 86400;
+                    let hours = (uptime_secs % 86400) / 3600;
+                    let minutes = (uptime_secs % 3600) / 60;
+                    
+                    let uptime_str = if days > 0 {
+                        format!("{}일 {}시간 {}분", days, hours, minutes)
+                    } else if hours > 0 {
+                        format!("{}시간 {}분", hours, minutes)
+                    } else {
+                        format!("{}분", minutes)
+                    };
+                    
+                    return (boot_time_str, uptime_str);
+                }
+            }
+        }
+        ("Unknown".to_string(), "Unknown".to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(output) = Command::new("sysctl").args(&["-n", "kern.boottime"]).output() {
+            if let Ok(boottime_str) = String::from_utf8(output.stdout) {
+                if let Some(sec_start) = boottime_str.find("sec = ") {
+                    let sec_part = &boottime_str[sec_start + 6..];
+                    if let Some(sec_end) = sec_part.find(",") {
+                        if let Ok(sec) = sec_part[..sec_end].trim().parse::<i64>() {
+                            use std::time::{SystemTime, UNIX_EPOCH, Duration};
+                            let boot_time = UNIX_EPOCH + Duration::from_secs(sec as u64);
+                            let boot_time_chrono: chrono::DateTime<chrono::Local> = boot_time.into();
+                            let boot_time_str = boot_time_chrono.format("%Y-%m-%d %H:%M:%S").to_string();
+                            
+                            if let Ok(elapsed) = SystemTime::now().duration_since(boot_time) {
+                                let uptime_secs = elapsed.as_secs();
+                                let days = uptime_secs / 86400;
+                                let hours = (uptime_secs % 86400) / 3600;
+                                let minutes = (uptime_secs % 3600) / 60;
+                                
+                                let uptime_str = if days > 0 {
+                                    format!("{}일 {}시간 {}분", days, hours, minutes)
+                                } else if hours > 0 {
+                                    format!("{}시간 {}분", hours, minutes)
+                                } else {
+                                    format!("{}분", minutes)
+                                };
+                                return (boot_time_str, uptime_str);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ("Unknown".to_string(), "Unknown".to_string())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    {
+        ("Unknown".to_string(), "Unknown".to_string())
+    }
+}

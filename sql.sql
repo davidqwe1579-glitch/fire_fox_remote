@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS user (
     user_id VARCHAR(255) PRIMARY KEY,
     expire_date DATETIME NOT NULL,
     connections INT NOT NULL DEFAULT 1,
-    current_connections INT NOT NULL DEFAULT -1
+    current_connections INT NOT NULL DEFAULT -1,
+    manager_logged_in TINYINT(1) NOT NULL DEFAULT 0
 );
 

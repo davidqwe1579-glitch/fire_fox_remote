@@ -70,25 +70,25 @@ function get_msgbox_width(width=500) {
     return width;
 }
 
+function getConnectStatusStr() {
+    if (service_stopped) {
+        return translate("Service is not running");
+    } else if (connect_status == -1) {
+        return translate('not_ready_status');
+    } else if (connect_status == 0) {
+        return translate('connecting_status');
+    }
+    return translate('Ready');
+}
+
 class ConnectStatus: Reactor.Component {
     function render() {
         return
             <div .connect-status>
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
-                {this.getConnectStatusStr()}
+                {getConnectStatusStr()}
                 {service_stopped ? <span .link #start-service>{translate('Start service')}</span> : ""}
             </div>;
-    }
-
-    function getConnectStatusStr() {
-        if (service_stopped) {
-            return translate("Service is not running");
-        } else if (connect_status == -1) {
-            return translate('not_ready_status');
-        } else if (connect_status == 0) {
-            return translate('connecting_status');
-        }
-        return translate('Ready');
     }
 
     event click $(#start-service) () {
@@ -713,11 +713,13 @@ class App: Reactor.Component
     function this() {
         app = this;
         this.cctv_cell_size = 300;
-        this.cctv_auto_fit = true;
+        this.cctv_auto_fit = false;
         this.auto_login = handler.get_option("auto-login") == "Y";
         this.login_id = handler.get_option("saved-login-id") || "";
+        this.is_manager_role = handler.get_option("saved-is-manager") == "Y";
         this.start_on_boot = handler.get_option("custom_start_on_boot") == "Y";
         this.is_logged_in = this.auto_login && this.login_id != "";
+        this.expire_date = "";
         this.active_tab = 'my_pc';
         this.cctv_drag_elem = null;
         this.cctv_drag_start_x = 0;
@@ -726,11 +728,15 @@ class App: Reactor.Component
     }
 
     function attached() {
+        if (this.auto_login && this.login_id) {
+            this.perform_login();
+        }
     }
 
     event click $(button#custom-logout) () {
         this.is_logged_in = false;
         this.auto_login = false;
+        this.expire_date = "";
         handler.set_option("auto-login", "N");
         handler.set_option("saved-login-id", "");
         this.update();
@@ -755,39 +761,56 @@ class App: Reactor.Component
             
             app.timer(20ms, function() {
                 try {
-                    var resp = handler.auth_login(id);
-                    if (resp == "OK") {
+                    var resp = handler.auth_login(id, app.is_manager_role ? "Y" : "N");
+                    stdout.println("Auth login response from Rust:", resp);
+                    if (resp.indexOf("OK") >= 0) {
                         if (app.auto_login) {
                             handler.set_option("auto-login", "Y");
                             handler.set_option("saved-login-id", id);
+                            handler.set_option("saved-is-manager", app.is_manager_role ? "Y" : "N");
                         } else {
                             handler.set_option("auto-login", "N");
                             handler.set_option("saved-login-id", "");
+                            handler.set_option("saved-is-manager", "N");
                         }
                         
+                        var parts = resp.split("|");
+                        if (parts.length > 1) {
+                            app.expire_date = parts[1];
+                        } else {
+                            app.expire_date = "";
+                        }
+                        
+                        var was_already_logged_in = app.is_logged_in;
                         app.login_error = "";
                         app.is_logged_in = true;
                         app.update();
                         
-                        var r = app.saved_window_size;
-                        if (r && isReasonableSize(r) && r[2] > 0 && !(r[2] == scaleIt(360) && r[3] == scaleIt(460))) {
-                            var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
-                            if (r[2] >= sw && r[3] >= sh) {
-                                self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
+                        if (!was_already_logged_in) {
+                            var r = app.saved_window_size;
+                            if (r && isReasonableSize(r) && r[2] > 0 && !(r[2] == scaleIt(360) && r[3] == scaleIt(460))) {
+                                var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
+                                if (r[2] >= sw && r[3] >= sh) {
+                                    self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
+                                } else {
+                                    view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
+                                }
                             } else {
-                                view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
+                                centerize(scaleIt(incoming_only ? incoming_only_width : 700), scaleIt(incoming_only ? 390 : 540));
                             }
-                        } else {
-                            centerize(scaleIt(incoming_only ? incoming_only_width : 700), scaleIt(incoming_only ? 390 : 540));
                         }
                         return false;
                     } else {
                         app.login_error = "";
+                        app.is_logged_in = false;
+                        app.expire_date = "";
                         app.update();
                         msgbox("custom-error", "인증 실패", resp || "알 수 없는 오류");
                     }
                 } catch (e) {
                     app.login_error = "";
+                    app.is_logged_in = false;
+                    app.expire_date = "";
                     app.update();
                     msgbox("custom-error", "오류", "시스템 오류: " + e.toString());
                 }
@@ -795,6 +818,8 @@ class App: Reactor.Component
             });
         } catch(e) {
             this.login_error = "요청 중 오류 발생";
+            this.is_logged_in = false;
+            this.expire_date = "";
             this.update();
         }
     }
@@ -817,6 +842,12 @@ class App: Reactor.Component
         this.start_on_boot = el.state.checked;
         handler.set_option("custom_start_on_boot", this.start_on_boot ? "Y" : "N");
         handler.set_custom_autorun(this.start_on_boot);
+        this.update();
+    }
+
+    event click $(button#login-role-mgr) (evt, el) {
+        this.is_manager_role = el.state.checked;
+        handler.set_option("saved-is-manager", this.is_manager_role ? "Y" : "N");
         this.update();
     }
 
@@ -856,6 +887,13 @@ class App: Reactor.Component
                             </div>
                         </div>
                         
+                        <div style="margin-bottom: 15px; text-align: left; flow: horizontal;">
+                            <div style="flow: horizontal; vertical-align: middle;">
+                                <button #login-role-mgr type="checkbox" checked={this.is_manager_role} style="margin-right: 4px; vertical-align: middle;" />
+                                <label style="color: #666; font-size: 0.85em; cursor: pointer; vertical-align: middle;">매니저 로그인 (CCTV 모드)</label>
+                            </div>
+                        </div>
+                        
                         {this.login_error ? <div style="color: #f56c6c; margin-bottom: 12px; font-weight: 600; font-size: 0.85em;">{this.login_error}</div> : ""}
                         
                         <div style="flow: horizontal; gap: 8px;">
@@ -883,10 +921,10 @@ class App: Reactor.Component
                             <input #cctv-size-slider type="hslider" style="width: 180px; margin: 0 10px; vertical-align: middle;" min="50" max="800" step="10" value={this.cctv_cell_size || 300} disabled={this.cctv_auto_fit !== false} />
                             <span #cctv-size-label style="color: #333; font-size: 0.85em; font-weight: 700; font-family: system-ui, sans-serif; vertical-align: middle; min-width: 40px;">{this.cctv_cell_size || 300}px</span>
                             
-                            <button .button #cctv-reboot-all style="margin-left: 10px; background: #d97706; color: white; border: none; border-radius: 6px; padding: 0 16px; height: 28px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 4px rgba(217,119,6,0.2); transition: all 0.2s;">전체 일괄 재시작</button>
+                            <button .button #cctv-reboot-all style="margin-left: 10px; background: #d97706; color: white; border: none; border-radius: 6px; padding: 0 16px; height: 28px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 4px rgba(217,119,6,0.2); transition: all 0.2s;">전체 재부팅</button>
                             <button .button #cctv-close style="margin-left: *; background: #e11d48; color: white; border: none; border-radius: 6px; padding: 0 16px; height: 28px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 4px rgba(225,29,72,0.2); transition: all 0.2s;">창 CLOSE</button>
                         </div>
-                        <div #cctv-grid-container style="size: *; position: relative; background: transparent; overflow-y: auto; overflow-x: hidden; padding: 10px; border-spacing: 0;">
+                        <div #cctv-grid-container style="size: *; flow: horizontal-wrap; background: transparent; overflow-y: auto; overflow-x: hidden; padding: 10px; border-spacing: 0;">
                             { (function() {
                                 var cells = [];
                                 var sessions = app.cctv_sessions || handler.get_recent_sessions() || [];
@@ -898,34 +936,70 @@ class App: Reactor.Component
                                 var cw = app.cell_w || app.cctv_cell_size || 300;
                                 var ch = app.cell_h || ((cw * 9 / 16).toInteger());
                                 var cell_style = "width:" + cw + "px;height:" + ch + "px;";
+                                var show_btns = cw >= 150;
+                                var header_fs = (cw * 0.045).toInteger();
+                                if (header_fs < 9) header_fs = 9;
+                                if (header_fs > 13) header_fs = 13;
                                 
                                 for (var i = 0; i < total; ++i) {
                                     var session = i < sessions.length ? sessions[i] : null;
                                     var cell_id = session ? "cctv-cell-" + session[0].replace(" ", "") : "cctv-cell-empty-" + i;
                                     
-                                    var v_idx = app.cctv_visual_order ? app.cctv_visual_order[cell_id] : undefined;
-                                    if (v_idx === undefined) v_idx = i;
-                                    if (!app.cctv_visual_order) app.cctv_visual_order = {};
-                                    app.cctv_visual_order[cell_id] = v_idx;
-                                    
-                                    var header_text = (v_idx + 1) + " ";
+                                    var header_text = (i + 1) + " ";
                                     if (session) {
                                         header_text += (session[4] || formatId(session[0]));
                                     }
                                     
                                     if (session) {
+                                        var label_style = "font-size:" + header_fs + "px; padding: 4px " + (show_btns ? "8px" : "4px") + ";";
+                                        var btn_style = "font-size:" + (header_fs - 1) + "px; width:" + (header_fs + 7) + "px; height:" + (header_fs + 5) + "px; line-height:" + (header_fs + 3) + "px;";
+                                        var btn_placeholder_style = "width:" + (header_fs + 7) + "px;";
+                                        var title_fs = (header_fs * 0.7).toInteger();
+                                        if (title_fs < 8) title_fs = 8;
+                                        var title_style = "font-size:" + title_fs + "px;";
+
+                                        var left_btn = null;
+                                        if (show_btns) {
+                                            if (i > 0) {
+                                                left_btn = <span .move-btn .move-left index={i} style={btn_style}>&lt;</span>;
+                                            } else {
+                                                left_btn = <span .move-btn-placeholder style={btn_placeholder_style} />;
+                                            }
+                                        }
+
+                                        var right_btn = null;
+                                        var refresh_btn = null;
+                                        if (show_btns) {
+                                            refresh_btn = <span .cctv-refresh-btn index={i} style={btn_style}>↻</span>;
+                                            if (i < total - 1) {
+                                                right_btn = <span .move-btn .move-right index={i} style={btn_style}>&gt;</span>;
+                                            } else {
+                                                right_btn = <span .move-btn-placeholder style={btn_placeholder_style} />;
+                                            }
+                                        }
+
                                         cells.push(
-                                            <div .cctv-cell id={cell_id} key={session[0]} style={cell_style} index={i} visual_index={v_idx}>
-                                                <div .cctv-label style="cursor: move;">
-                                                    {header_text}
+                                            <div .cctv-cell id={cell_id} key={session[0]} style={cell_style} index={i}>
+                                                <div .cctv-label style={label_style}>
+                                                    <span .cctv-title-text style={title_style}>{header_text}</span>
+                                                    {left_btn}
+                                                    {refresh_btn}
+                                                    {right_btn}
                                                 </div>
                                                 <video />
+                                                <div .offline-overlay>
+                                                    <div>
+                                                        <div style="font-size: 16px; font-weight: bold; color: #ef4444; margin-bottom: 8px;">연결 끊김</div>
+                                                        <div style="font-size: 11px; color: #94a3b8;">재접속 시도 중...</div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     } else {
+                                        var empty_label_style = "color: #666; font-size:" + header_fs + "px; padding: 4px " + (show_btns ? "8px" : "4px") + ";";
                                         cells.push(
-                                            <div .cctv-cell .empty id={cell_id} style={cell_style} index={i} visual_index={v_idx}>
-                                                <div .cctv-label style="color: #666;">
+                                            <div .cctv-cell .empty id={cell_id} style={cell_style} index={i}>
+                                                <div .cctv-label style={empty_label_style}>
                                                     {header_text} - 비어있음
                                                 </div>
                                             </div>
@@ -958,40 +1032,52 @@ class App: Reactor.Component
                     
                     <div .login-status-sidebar>
                         {this.is_logged_in ? <div style="font-weight: 600; color: #4e8683; margin-bottom: 5px;">계정:</div> : ""}
-                        {this.is_logged_in ? <div>{this.login_id}</div> : ""}
+                        {this.is_logged_in ? <div style="margin-bottom: 8px;">{this.login_id}</div> : ""}
+                        {this.is_logged_in && this.expire_date ? <div style="font-weight: 600; color: #4e8683; margin-bottom: 5px;">만료일:</div> : ""}
+                        {this.is_logged_in && this.expire_date ? <div style="margin-bottom: 8px; color: #666; font-size: 0.95em;">{this.expire_date}</div> : ""}
                         <button .btn-teal #custom-logout style="width: 80px; margin: 10px auto 0 auto; display: block; font-size: 0.85em; padding: 6px 0;">
                             {this.is_logged_in ? "로그아웃" : "로그인"}
                         </button>
-                        <div style="margin-top: 15px;">
-                            <ConnectStatus @{this.connect_status} />
-                        </div>
                     </div>
                 </div>
 
-                <div .main-area style={incoming_only ? "display:none;" : ""}>
-
-                    
-                    <div .new-card .desktop-card style={this.active_tab == 'my_pc' ? "" : "display:none;"}>
-                        <div .desktop-info style="position: relative;">
-                            <div .card-title>내 데스크탑 <MyIdMenu /></div>
-                            <div .card-subtitle>ID: {formatId(get_id()) || translate("Generating ...")}</div>
-                            <PasswordArea />
+                <div style="flow: vertical; size: *; height: *; background: #f0f2f5;">
+                    <div .main-area style={incoming_only ? "display:none;" : ""}>
+                        
+                        <div .new-card .desktop-card style={this.active_tab == 'my_pc' ? "" : "display:none;"}>
+                            <div .desktop-info style="position: relative;">
+                                <div .card-title>내 데스크탑 <MyIdMenu /></div>
+                                <div .card-subtitle>ID: {formatId(get_id()) || translate("Generating ...")}</div>
+                                <PasswordArea />
+                            </div>
+                            <button .btn-teal #cctv-connect style={this.is_manager_role ? "margin-top:auto;" : "display:none;"}>CCTV Mode</button>
                         </div>
-                        <button .btn-teal #cctv-connect style="margin-top:auto;">CCTV Mode</button>
+                        
+                        <div .new-card style={this.active_tab == 'remote' ? "" : "display:none;"}>
+                            <div .card-title-dark>원격 제어</div>
+                            <div .remote-input-row>
+                                <ID @{this.remote_id} novalue="원격 ID 입력" />
+                                <button .btn-teal #connect style="margin-left: 10px; width: 80px;">연결</button>
+                            </div>
+                        </div>
+                        
+                        <div .new-card style={this.active_tab == 'remote' ? "size: *; padding: 10px 24px;" : "display:none;"}>
+                            <div style="margin-top: 5px; overflow-y: auto; size: *;">
+                                <MultipleSessions @{this.multipleSessions} />
+                            </div>
+                        </div>
                     </div>
                     
-                    <div .new-card style={this.active_tab == 'remote' ? "" : "display:none;"}>
-                        <div .card-title-dark>원격 제어</div>
-                        <div .remote-input-row>
-                            <ID @{this.remote_id} novalue="원격 ID 입력" />
-                            <button .btn-teal #connect style="margin-left: 10px; width: 80px;">연결</button>
+                    <div .main-status-bar style="height: 32px; line-height: 32px; background: #ffffff; border-top: 1px solid #ebeef5; flow: horizontal; padding: 0 20px; color: #666; font-size: 0.85em; font-family: system-ui, sans-serif;">
+                        <div style="flow: horizontal; vertical-align: middle; align-items: center;">
+                            <ConnectStatus @{this.connect_status} />
                         </div>
-                    </div>
-                    
-                    <div .new-card style={this.active_tab == 'remote' ? "size: *; padding: 10px 24px;" : "display:none;"}>
-                        <div style="margin-top: 5px; overflow-y: auto; size: *;">
-                            <MultipleSessions @{this.multipleSessions} />
-                        </div>
+                        {this.is_logged_in && this.expire_date ? 
+                            <div style="margin-left: *; flow: horizontal; vertical-align: middle; align-items: center;">
+                                <span style="font-weight: 600; color: #4e8683; margin-right: 6px; vertical-align: middle;">만료일:</span>
+                                <span style="color: #333; font-weight: 600; vertical-align: middle;">{this.expire_date}</span>
+                            </div> : ""
+                        }
                     </div>
                 </div>
 
@@ -1056,6 +1142,7 @@ class App: Reactor.Component
     }
 
     event click $(button#cctv-connect) {
+        if (!this.is_manager_role) return;
         var sessions = handler.get_recent_sessions();
         if (!sessions || sessions.length == 0) {
             msgbox("custom-error", "CCTV", translate("Empty"));
@@ -1069,43 +1156,43 @@ class App: Reactor.Component
         this.show_cctv = true;
         this.update();
         
-        var self_app = this;
         this.cctv_render_id = (this.cctv_render_id || 0) + 1;
-        var render_id = this.cctv_render_id;
-        var idx = 0;
-        
-        function push_next() {
-            if (self_app.cctv_render_id != render_id) return;
-            if (!self_app.show_cctv) return;
-            if (idx >= total) return;
-            
-            self_app.cctv_sessions.push(sessions[idx]);
+        for (var idx = 0; idx < total; ++idx) {
+            this.cctv_sessions.push(sessions[idx]);
             handler.push_cctv_peer(sessions[idx][0]);
-            self_app.update();
-            
-            idx++;
-            self_app.timer(100ms, push_next);
         }
-        
-        self_app.timer(100ms, push_next);
+        this.update();
         
         if (!this.cctv_auto_refresh_started) {
             this.cctv_auto_refresh_started = true;
             function auto_refresh() {
-                if (!self_app.show_cctv) return;
-                var videos = self_app.$$(video);
-                if (videos && videos.length > 0) {
-                    for (var v in videos) {
-                        if (!v.onClose) {
-                            v.onClose = function() {
-                                this.is_closed = true;
-                            };
-                        }
-                        if (v.is_closed) {
-                            v.is_closed = false;
-                            if (v.reconnect) v.reconnect(false);
-                        } else if (v.refresh_video) {
-                            // v.refresh_video(-1); // This causes a native crash in CCTV mode
+                if (self_app.show_cctv) {
+                    var videos = self_app.$$(video);
+                    if (videos && videos.length > 0) {
+                        for (var v in videos) {
+                            if (!v.onClose) {
+                                v.onClose = function() {
+                                    this.is_closed = true;
+                                };
+                            }
+                            var cell = v.parent;
+                            var is_conn = v.is_connected ? v.is_connected() : true;
+                            var is_connecting = v.is_connecting ? v.is_connecting() : false;
+                            if (v.is_closed) {
+                                v.is_closed = false;
+                                if (cell) cell.attributes.addClass("disconnected");
+                                if (v.reconnect) v.reconnect(false);
+                            } else if (!is_conn) {
+                                if (cell) cell.attributes.addClass("disconnected");
+                                if (!is_connecting) {
+                                    if (v.reconnect) v.reconnect(false);
+                                }
+                            } else {
+                                if (cell) cell.attributes.removeClass("disconnected");
+                                if (v.refresh_video) {
+                                    v.refresh_video(-1);
+                                }
+                            }
                         }
                     }
                 }
@@ -1122,19 +1209,37 @@ class App: Reactor.Component
         this.update();
     }
 
+    event click $(.cctv-refresh-btn) (evt, me) {
+        var cell = me.parent.parent;
+        if (cell) {
+            var v = cell.$(video);
+            if (v) {
+                try {
+                    v.reconnect(false);
+                } catch (e) {
+                    stdout.println("reconnect error:", e);
+                }
+            }
+        }
+        return true;
+    }
+
 
 
     event click $(button#cctv-reboot-all) {
-        var videos = this.$$(video);
+        var videos = self.$$(video);
         if (!videos || videos.length == 0) {
             msgbox("custom-error", "재부팅", "연결된 컴퓨터가 없습니다.");
             return;
         }
         msgbox("restart-confirmation", "모든 컴퓨터 재부팅", "정말 모든 컴퓨터를 재부팅하시겠습니까?", "", function(res=null) {
-            if (res == #ok || res == "ok" || res == #yes || res == "yes") {
-                for (var v in videos) {
-                    if (typeof v.restart_remote_device == #function) {
+            if (res != null) {
+                for (var i = 0; i < videos.length; ++i) {
+                    var v = videos[i];
+                    try {
                         v.restart_remote_device();
+                    } catch (e) {
+                        stdout.println("restart_remote_device error:", e);
                     }
                 }
             }
@@ -1160,112 +1265,24 @@ class App: Reactor.Component
         updateCctvLayout();
     }
     
-    event mousedown $(.cctv-label) (evt) {
-        if (!evt.mainButton) return false;
-        var cell = evt.target.$p(.cctv-cell);
-        if (cell) {
-            this.cctv_drag_elem = cell;
-            this.cctv_drag_source_idx = cell.attributes["index"].toInteger();
-            this.cctv_drag_start_x = evt.xView;
-            this.cctv_drag_start_y = evt.yView;
-            cell.capture(true);
-            cell.style#opacity = 0.7;
-            cell.style#z-index = 100;
+    event click $(.move-left) (evt) {
+        try {
+            var clicked_idx = evt.target.attributes["index"].toInteger();
+            this.swap_cctv(clicked_idx, clicked_idx - 1);
+        } catch (e) {
+            stdout.println("move-left click error:", e);
         }
         return true;
     }
 
-    event mousemove $(.cctv-cell) (evt) {
-        if (this.cctv_drag_elem && evt.mainButton) {
-            var dx = evt.xView - this.cctv_drag_start_x;
-            var dy = evt.yView - this.cctv_drag_start_y;
-            this.cctv_drag_elem.style#transform = String.printf("translate(%dpx, %dpx)", dx, dy);
-        }
-    }
-    
-    event mouseup $(.cctv-cell) (evt) {
-        if (!this.cctv_drag_elem) return;
+    event click $(.move-right) (evt) {
         try {
-            this.cctv_drag_elem.style#opacity = 1.0;
-            this.cctv_drag_elem.style#z-index = 0;
-            this.cctv_drag_elem.style#transform = "none";
-            this.cctv_drag_elem.capture(false);
-            
-            var dx = evt.xView - this.cctv_drag_start_x;
-            var dy = evt.yView - this.cctv_drag_start_y;
-            
-            var cell_w = app.cell_w || 300;
-            var cell_h = app.cell_h || 200;
-            
-            var cols_offset = Math.round(dx.toFloat() / cell_w.toFloat()).toInteger();
-            var rows_offset = Math.round(dy.toFloat() / cell_h.toFloat()).toInteger();
-            
-            var cols = ($(div#cctv-grid-container).box(#width, #inner) / cell_w).toInteger();
-            if (cols < 1) cols = 1;
-            
-            var container = $(#cctv-grid-container);
-            var original_cell = this.cctv_drag_elem;
-            
-            var original_visual_idx = original_cell.attributes["visual_index"];
-            if (original_visual_idx !== undefined) original_visual_idx = original_visual_idx.toInteger();
-            else original_visual_idx = original_cell.attributes["index"].toInteger();
-            
-            var swap_visual_idx = original_visual_idx + cols_offset + (rows_offset * cols);
-            var total_cells = container.$$(.cctv-cell).length;
-            
-            this.cctv_drag_elem = null;
-            this.cctv_drag_source_idx = -1;
-            
-            if (swap_visual_idx >= 0 && swap_visual_idx < total_cells && swap_visual_idx != original_visual_idx) {
-                var other_cell = null;
-                for (var cell in container.$$(.cctv-cell)) {
-                    var v = cell.attributes["visual_index"];
-                    if (v !== undefined && v.toInteger() == swap_visual_idx) {
-                        other_cell = cell;
-                        break;
-                    } else if (v === undefined && cell.attributes["index"].toInteger() == swap_visual_idx) {
-                        other_cell = cell;
-                        break;
-                    }
-                }
-                
-                if (other_cell) {
-                    original_cell.attributes["visual_index"] = swap_visual_idx.toString();
-                    other_cell.attributes["visual_index"] = original_visual_idx.toString();
-                    
-                    var order_arr = new Array(total_cells);
-                    for (var cell in container.$$(.cctv-cell)) {
-                        var v_idx = cell.attributes["visual_index"];
-                        if (v_idx !== undefined) v_idx = v_idx.toInteger();
-                        else v_idx = cell.attributes["index"].toInteger();
-                        
-                        var peer_id = cell.attributes["id"].replace("cctv-cell-", "");
-                        if (!peer_id.startsWith("empty-")) {
-                            order_arr[v_idx] = peer_id;
-                        }
-                    }
-                    
-                    var valid_order = [];
-                    for (var i = 0; i < order_arr.length; i++) {
-                        if (order_arr[i]) valid_order.push(order_arr[i]);
-                    }
-                    handler.set_option("recent_order", JSON.stringify(valid_order));
-                    
-                    updateCctvLayout();
-                    
-                    // Update visual_order map in app
-                    if (!app.cctv_visual_order) app.cctv_visual_order = {};
-                    var id1 = original_cell.attributes["id"].replace("cctv-cell-", "");
-                    var id2 = other_cell.attributes["id"].replace("cctv-cell-", "");
-                    if (!id1.startsWith("empty-")) app.cctv_visual_order["cctv-cell-" + id1] = swap_visual_idx;
-                    if (!id2.startsWith("empty-")) app.cctv_visual_order["cctv-cell-" + id2] = original_visual_idx;
-                }
-            } else {
-                updateCctvLayout();
-            }
-        } catch(e) {
-            msgbox("custom-error", "Drag Error", e.toString());
+            var clicked_idx = evt.target.attributes["index"].toInteger();
+            this.swap_cctv(clicked_idx, clicked_idx + 1);
+        } catch (e) {
+            stdout.println("move-right click error:", e);
         }
+        return true;
     }
 
     event click $(.cctv-cell) (evt) {
@@ -1364,6 +1381,40 @@ class App: Reactor.Component
 
     function newRemote(type) {
         createNewConnect(this.remote_id.value, type);
+    }
+
+    function swap_cctv(idx1, idx2) {
+        try {
+            if (this.cctv_sessions && 
+                idx1 >= 0 && idx1 < this.cctv_sessions.length && 
+                idx2 >= 0 && idx2 < this.cctv_sessions.length) {
+                
+                var item1 = this.cctv_sessions[idx1];
+                var item2 = this.cctv_sessions[idx2];
+                this.cctv_sessions[idx1] = item2;
+                this.cctv_sessions[idx2] = item1;
+                
+                var order = [];
+                for (var s in this.cctv_sessions) {
+                    if (s && s[0]) {
+                        order.push(s[0]);
+                    }
+                }
+                handler.set_local_option("recent_order", JSON.stringify(order));
+                
+                var self_app = this;
+                self.timer(10ms, function() {
+                    try {
+                        self_app.update();
+                        updateCctvLayout();
+                    } catch (err) {
+                        stdout.println("update timer error:", err);
+                    }
+                });
+            }
+        } catch (e) {
+            stdout.println("swap_cctv error:", e);
+        }
     }
 }
 
@@ -2369,42 +2420,10 @@ function updateCctvLayout() {
     var cw_str = cell_w.toString() + "px";
     var ch_str = cell_h.toString() + "px";
     
-    var current_idx = 0;
     for (var cell in cells) {
-        var v_idx = cell.attributes["visual_index"];
-        if (v_idx !== undefined) v_idx = v_idx.toInteger();
-        else v_idx = current_idx;
-        
-        var col = v_idx % cols;
-        var row = Math.floor(v_idx / cols).toInteger();
-        
-        var left = 10 + col * cell_w;
-        var top = 10 + row * cell_h;
-        
-        cell.style#position = "absolute";
-        cell.style#left = left.toString() + "px";
-        cell.style#top = top.toString() + "px";
         cell.style#width = cw_str;
         cell.style#height = ch_str;
-        cell.style#margin = "0";
-        
-        var label = cell.$(.cctv-label);
-        if (label) {
-            var parts = label.text.split(" ");
-            parts[0] = (v_idx + 1).toString();
-            label.text = parts.join(" ");
-        }
-        
-        current_idx++;
     }
-    
-    var total_rows = Math.ceil(total.toFloat() / cols.toFloat()).toInteger();
-    var spacer = container.$(.cctv-spacer);
-    if (!spacer) {
-        container.insert(<div .cctv-spacer style="width:1px;" />);
-        spacer = container.$(.cctv-spacer);
-    }
-    spacer.style#height = (total_rows * cell_h + 20).toString() + "px";
 }
 
 class CctvVideo : Element {

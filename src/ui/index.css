@@ -608,14 +608,76 @@ textarea.grey-text {
 
 .cctv-label {
     display: block;
+    flow: horizontal;
     width: *;
     background: #e2e8f0;
     border-bottom: 1px solid #cbd5e1;
-    padding: 8px 12px;
+    padding: 4px 8px;
     color: #1e293b;
     font-family: system-ui, sans-serif;
     font-weight: 700;
     font-size: 12px;
+    align-items: center;
+}
+
+.cctv-title-text {
+    width: *;
+    height: 18px;
+    line-height: 18px;
+    text-align: left;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.move-btn {
+    display: inline-block;
+    width: 20px;
+    height: 18px;
+    line-height: 16px;
+    text-align: center;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+    border-radius: 4px;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.move-btn:hover {
+    background: #94a3b8;
+    color: #0f172a;
+}
+
+.cctv-refresh-btn {
+    display: inline-block;
+    width: 20px;
+    height: 18px;
+    line-height: 16px;
+    text-align: center;
+    background: #cbd5e1;
+    border: 1px solid #94a3b8;
+    border-radius: 4px;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    vertical-align: middle;
+    margin-right: 3px;
+}
+
+.cctv-refresh-btn:hover {
+    background: #4e8683;
+    color: white;
+}
+
+.move-btn-placeholder {
+    display: inline-block;
+    width: 20px;
+    height: 18px;
 }
 
 .cctv-cell video {
@@ -627,6 +689,33 @@ textarea.grey-text {
     background: #000;
     border-radius: 12px;
 }
+
+.cctv-cell.disconnected video {
+    visibility: hidden;
+}
+
+.offline-overlay {
+    visibility: none;
+    position: absolute;
+    left: 0;
+    top: 23px;
+    right: 0;
+    bottom: 0;
+    background: #111115;
+    color: #e2e8f0;
+    font-family: system-ui, sans-serif;
+    text-align: center;
+}
+
+.offline-overlay > div {
+    margin: *;
+    flow: vertical;
+}
+
+.cctv-cell.disconnected .offline-overlay {
+    visibility: visible;
+}
+
 
 .cctv-cell.selected {
     outline: 2px solid #4e8683;
@@ -911,4 +1000,141 @@ div#myid svg#menu {
     height: 14px;
     vertical-align: middle;
     margin-left: 4px;
+}
+
+/* Database Table Styles */
+.recent-sessions-table-wrapper {
+    width: *;
+    overflow-x: auto;
+    margin-top: 10px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+table.sessions-table {
+    width: *;
+    border-collapse: collapse;
+    font-family: system-ui, sans-serif;
+}
+
+table.sessions-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 16px;
+    border-bottom: 2px solid #e2e8f0;
+    text-align: left;
+}
+
+table.sessions-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+table.sessions-table tbody tr:hover {
+    background: #f1f5f9;
+}
+
+/* Zebra striping */
+table.sessions-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+table.sessions-table tbody tr:nth-child(even):hover {
+    background: #f1f5f9;
+}
+
+table.sessions-table td.col-name#alias {
+    font-weight: 600;
+    cursor: pointer;
+}
+table.sessions-table td.col-name#alias:hover {
+    text-decoration: underline;
+    color: #4e8683;
+}
+
+table.sessions-table th.col-no, table.sessions-table td.col-no {
+    width: 50px;
+    text-align: center;
+    font-weight: 700;
+    color: #64748b;
+}
+
+table.sessions-table th.col-os, table.sessions-table td.col-os {
+    width: 120px;
+}
+
+table.sessions-table th.col-menu, table.sessions-table td.col-menu {
+    width: 60px;
+    text-align: center;
+}
+
+table.sessions-table th.col-boot, table.sessions-table td.col-boot {
+    width: 220px;
+}
+
+.platform-row {
+    flow: horizontal;
+    align-items: center;
+}
+
+.platform-icon-wrapper {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    vertical-align: middle;
+    margin-right: 8px;
+    padding: 4px;
+}
+
+.platform-icon-wrapper svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
+.platform-text {
+    vertical-align: middle;
+    font-weight: 600;
+    color: #475569;
+}
+
+.menu-btn-clicker {
+    display: inline-block;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.menu-btn-clicker:hover {
+    background: #cbd5e1;
+}
+
+.menu-btn-clicker svg#menu {
+    margin: 0;
+    padding: 0;
+    width: 14px;
+    height: 14px;
+}
+
+.main-status-bar div.connect-status {
+    border-top: none;
+    padding: 0;
+    width: auto;
+    background: transparent;
+    font-size: 1.0em;
+    flow: horizontal;
+    align-items: center;
+    white-space: nowrap;
+}
+.main-status-bar div.connect-status > span.connect-status-icon {
+    margin-right: 6px;
+    vertical-align: middle;
 }

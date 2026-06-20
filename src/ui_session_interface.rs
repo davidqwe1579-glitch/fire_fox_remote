@@ -1283,7 +1283,7 @@ impl<T: InvokeUiSession> Session<T> {
         let mut connection_round_state_lock = self.connection_round_state.lock().unwrap();
         if self.thread.lock().unwrap().is_some() {
             match connection_round_state_lock.state {
-                ConnectionState::Connecting => return,
+                ConnectionState::Connecting => self.send(Data::Close),
                 ConnectionState::Connected => self.send(Data::Close),
                 ConnectionState::Disconnected => {}
             }
@@ -1928,6 +1928,12 @@ impl<T: InvokeUiSession> Session<T> {
     }
     pub fn ctrl_alt_del(&self) {
         self.send_key_event(&crate::keyboard::client::event_ctrl_alt_del());
+    }
+    pub fn is_connected(&self) -> bool {
+        matches!(self.connection_round_state.lock().unwrap().state, ConnectionState::Connected)
+    }
+    pub fn is_connecting(&self) -> bool {
+        matches!(self.connection_round_state.lock().unwrap().state, ConnectionState::Connecting)
     }
 }
 

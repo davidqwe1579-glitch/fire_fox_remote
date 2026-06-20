@@ -2298,6 +2298,8 @@ impl LoginConfigHandler {
         if view_only || self.get_toggle_option("disable-clipboard") {
             msg.disable_clipboard = BoolOption::Yes.into();
         }
+        msg.custom_fps = 60;
+        *self.custom_fps.lock().unwrap() = Some(60);
         msg.supported_decoding = MessageField::some(self.get_supported_decoding());
         Some(msg)
     }
@@ -2540,6 +2542,14 @@ impl LoginConfigHandler {
             platform: pi.platform.clone(),
         };
         let mut config = self.load_config();
+        if let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(&pi.platform_additions) {
+            if let Some(boot_time) = map.get("boot_time").and_then(|x| x.as_str()) {
+                config.options.insert("boot_time".to_owned(), boot_time.to_owned());
+            }
+            if let Some(uptime) = map.get("uptime").and_then(|x| x.as_str()) {
+                config.options.insert("uptime".to_owned(), uptime.to_owned());
+            }
+        }
         config.info = serde;
         let password = self.password.clone();
         let password0 = config.password.clone();
@@ -2711,6 +2721,11 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
+        let user_info_str = LocalConfig::get_option("user_info");
+        let my_username = serde_json::from_str::<serde_json::Value>(&user_info_str)
+            .ok()
+            .and_then(|x| x.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+            .unwrap_or_default();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2728,6 +2743,7 @@ impl LoginConfigHandler {
             .into(),
             hwid,
             avatar,
+            my_username,
             ..Default::default()
         };
         match self.conn_type {

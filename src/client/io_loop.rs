@@ -165,14 +165,46 @@ impl<T: InvokeUiSession> Remote<T> {
             ConnType::default()
         };
 
-        match Client::start(
-            &self.handler.get_id(),
+        let id = self.handler.get_id();
+        let mut client_start = Box::pin(Client::start(
+            &id,
             key,
             token,
             conn_type,
             self.handler.clone(),
-        )
-        .await
+        ));
+
+        let connection_res = loop {
+            tokio::select! {
+                res = &mut client_start => {
+                    break Some(res);
+                }
+                d = self.receiver.recv() => {
+                    match d {
+                        Some(Data::Close) => {
+                            log::info!("Connection attempt cancelled by UI Close");
+                            break None;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        };
+
+        let start_res = match connection_res {
+            Some(res) => res,
+            None => {
+                let _set_disconnected_ok = self
+                    .handler
+                    .connection_round_state
+                    .lock()
+                    .unwrap()
+                    .set_disconnected(round);
+                return;
+            }
+        };
+
+        match start_res
         {
             Ok(((mut peer, direct, pk, kcp, stream_type), (feedback, rendezvous_server))) => {
                 self.handler
@@ -1144,12 +1176,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 v.fps_control.inactive_counter = 0;
             }
         });
-        let custom_fps = self.handler.lc.read().unwrap().custom_fps.clone();
-        let custom_fps = custom_fps.lock().unwrap().clone();
-        let mut custom_fps = custom_fps.unwrap_or(30);
-        if custom_fps < 5 || custom_fps > 120 {
-            custom_fps = 30;
-        }
+        let custom_fps = 60;
         let inactive_threshold = 15;
         let max_queue_len = self
             .video_threads
