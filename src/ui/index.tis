@@ -1127,8 +1127,9 @@ class App: Reactor.Component
         }
         msgbox("restart-confirmation", "모든 컴퓨터 재부팅", "정말 모든 컴퓨터를 재부팅하시겠습니까?", "", function(res=null) {
             if (res == #ok || res == "ok" || res == #yes || res == "yes") {
-                for (var v in videos) {
-                    if (v.restart_remote_device) {
+                for (var i = 0; i < videos.length; ++i) {
+                    var v = videos[i];
+                    if (typeof v.restart_remote_device == #function) {
                         v.restart_remote_device();
                     }
                 }
@@ -1198,10 +1199,14 @@ class App: Reactor.Component
             if (cols < 1) cols = 1;
             
             var swap_idx = this.cctv_drag_source_idx + cols_offset + (rows_offset * cols);
+            var original_source_idx = this.cctv_drag_source_idx;
             
-            if (swap_idx >= 0 && swap_idx < this.cctv_sessions.length && swap_idx != this.cctv_drag_source_idx) {
-                var item = this.cctv_sessions[this.cctv_drag_source_idx];
-                this.cctv_sessions.remove(this.cctv_drag_source_idx);
+            this.cctv_drag_elem = null;
+            this.cctv_drag_source_idx = -1;
+            
+            if (swap_idx >= 0 && swap_idx < this.cctv_sessions.length && swap_idx != original_source_idx) {
+                var item = this.cctv_sessions[original_source_idx];
+                this.cctv_sessions.remove(original_source_idx);
                 
                 if (swap_idx >= this.cctv_sessions.length) {
                     this.cctv_sessions.push(item);
@@ -1218,10 +1223,6 @@ class App: Reactor.Component
                 this.update();
                 self.timer(10ms, updateCctvLayout);
             }
-            this.cctv_drag_elem.style#z-index = 0;
-            this.cctv_drag_elem.capture(false);
-            this.cctv_drag_elem = null;
-            this.cctv_drag_source_idx = -1;
         }
     }
 
@@ -2305,9 +2306,10 @@ function updateCctvLayout() {
         cell_h = (cell_w * 9 / 16).toInteger() + 35;
     } else {
         var base_w = app.cctv_cell_size || 300;
-        var cols = (cw / base_w).toInteger();
+        var safe_cw = cw - 24;
+        var cols = (safe_cw / base_w).toInteger();
         if (cols < 1) cols = 1;
-        cell_w = (cw / cols).toInteger() - 1;
+        cell_w = (safe_cw / cols).toInteger() - 2;
         cell_h = (cell_w * 9 / 16).toInteger() + 35;
     }
     
