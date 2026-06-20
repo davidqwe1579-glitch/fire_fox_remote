@@ -137,14 +137,10 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         }
 
                         // Check if trying to log in as manager
+                        // Check if trying to log in as manager
                         if client_is_manager {
-                            let mut has_manager = conns_list.iter().any(|c| c.is_manager);
-                            if !has_manager && manager_logged_in != 0 {
-                                // If DB says manager logged in, but no active manager in memory, trust memory and heal DB
-                                has_manager = false;
-                            }
-
-                            if has_manager {
+                            // If a manager is already logged in (DB flag), reject the new login
+                            if manager_logged_in != 0 {
                                 drop(conns);
                                 let resp = AuthResponse {
                                     status: "ERROR".to_string(),
