@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[cfg(target_os = "linux")]
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use hbb_common::{
     async_recursion::async_recursion,
     config::{Config, Socks5Server},

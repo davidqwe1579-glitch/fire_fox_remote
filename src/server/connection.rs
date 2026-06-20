@@ -2452,6 +2452,12 @@ impl Connection {
                 return false;
             }
 
+            if AUTHED_CONNS.lock().unwrap().len() >= 20 {
+                self.send_login_error("세션 초과").await;
+                return false;
+            }
+
+
             #[cfg(target_os = "windows")]
             if self.terminal
                 && lr.os_login.username.trim().is_empty()

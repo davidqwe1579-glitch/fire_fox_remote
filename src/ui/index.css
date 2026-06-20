@@ -573,7 +573,7 @@ textarea.grey-text {
 
 #cctv-grid-container {
     size: *;
-    flow: horizontal-flow;
+    flow: horizontal-wrap;
     border-spacing: 3px;
     background: #080808;
     border-radius: 8px;
@@ -583,58 +583,63 @@ textarea.grey-text {
 
 .cctv-cell {
     display: block;
-    background: #0d0d12;
-    border: 1px solid #2a2a35;
+    flow: vertical;
+    background: #ffffff;
+    border: 1px solid #ebeef5;
     border-radius: 12px;
     position: relative;
     overflow: hidden;
-    padding: 0;
-    margin: 5px;
-    flow: vertical;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 
 .cctv-cell:hover {
-    transform: scale(1.02);
-    box-shadow: 0 8px 25px rgba(0, 255, 255, 0.2);
-    border: 1px solid #00ffff;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(78,134,131,0.15);
+    border-color: #4e8683;
 }
 
 .cctv-cell.empty {
-    background: linear-gradient(135deg, #0f0f15, #1a1a24);
-    border: 1px dashed #3a3a45;
+    background: #f8f9fa;
+    border: 1px dashed #dcdfe6;
+    box-shadow: none;
 }
 
 .cctv-label {
+    display: none;
     position: absolute;
-    left: 8px;
-    top: 8px;
-    background: rgba(10, 10, 15, 0.75);
-    padding: 4px 10px;
-    border-radius: 6px;
-    color: #00ffff;
-    font-size: 0.7em;
-    font-weight: 600;
-    z-index: 10;
+    top: 0;
+    left: 0;
+    width: *;
+    background: rgba(226, 232, 240, 0.9);
+    border-bottom: 1px solid #cbd5e1;
+    padding: 8px 12px;
+    color: #1e293b;
     font-family: system-ui, sans-serif;
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    font-weight: 700;
+    font-size: 12px;
+    z-index: 10;
+}
+
+.cctv-cell:hover .cctv-label {
+    display: block;
 }
 
 .cctv-cell video {
     behavior: native-remote video;
+    prototype: CctvVideo;
     size: *;
     margin: 0;
     padding: 0;
     foreground-size: contain;
-    background: transparent;
+    background: #000;
     border-radius: 12px;
 }
 
 .cctv-cell.selected {
-    outline: 2px solid #00ffff;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+    outline: 2px solid #4e8683;
+    box-shadow: 0 0 15px rgba(78, 134, 131, 0.3);
     z-index: 20;
 }
 
@@ -644,79 +649,207 @@ button.button:hover { background: linear-gradient(135deg, #0072ff, #00c6ff); box
 button.outline { background: transparent; border: 1px solid #00ffff; color: #00ffff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.2); font-weight: 700; border-radius: 8px; }
 button.outline:hover { background: rgba(0, 255, 255, 0.1); border-color: #00ffff; box-shadow: 0 0 15px rgba(0, 255, 255, 0.4); }
 
-/* Dashboard App Layout */
+/* Dashboard App Layout - LIGHT THEME OVERHAUL */
 .dashboard-app {
+    flow: horizontal;
+    size: *;
+    background: #f0f2f5;
+    color: #333333;
+}
+
+.sidebar {
+    width: 110px;
+    height: *;
+    background: #e8eaf0;
+    border-right: 1px solid #dcdfe6;
+    flow: vertical;
+    padding-top: 100px;
+}
+
+.nav-item {
+    flow: vertical;
+    align-items: center;
+    padding: 20px 0;
+    color: #000;
+    cursor: pointer;
+    border-left: 4px solid transparent;
+    font-weight: 600;
+    font-size: 0.95em;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.nav-item.active {
+    background: #ffffff;
+    border-left: 4px solid #4e8683;
+}
+
+.nav-item svg {
+    size: 26px;
+    margin: 0 auto 8px auto;
+    display: block;
+    color: #4e8683;
+}
+
+.main-area {
     flow: vertical;
     size: *;
-    background: linear-gradient(to bottom, #101018, #08080c);
-    color: #ffffff;
-}
-
-.top-header {
-    flow: horizontal;
-    height: 60px;
-    padding: 0 15px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(0, 255, 255, 0.15);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    align-items: center;
-}
-
-.brand-title {
-    font-size: 1.4em;
-    font-weight: 800;
-    color: #00ffff;
-    text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
-    margin-right: *;
-}
-
-.top-nav-items {
-    flow: horizontal;
-    align-items: center;
-    border-spacing: 15px;
-}
-
-.main-content {
-    flow: vertical;
-    size: *;
-    padding: 20px;
+    padding: 30px;
     overflow-y: auto;
 }
 
-.hero-connect-section {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    padding: 30px;
+.page-title {
+    font-size: 1.8em;
+    font-weight: 800;
+    color: #000;
     margin-bottom: 20px;
-    box-shadow: 0 5px 25px rgba(0,0,0,0.4);
+    padding-left: 5px;
+    letter-spacing: -0.02em;
 }
 
-.hero-connect-section .title {
-    font-size: 1.5em;
+.new-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    flow: vertical;
+}
+
+.desktop-card {
+    background: #546c70;
+    color: #ffffff;
+    flow: horizontal;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(84, 108, 112, 0.3);
+}
+
+.desktop-info {
+    flow: vertical;
+    margin-right: *;
+}
+
+.desktop-info .card-title {
+    font-size: 1.4em;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #ffffff;
+}
+
+.desktop-info .card-subtitle {
+    font-size: 1.1em;
+    color: #aebfc2;
+    letter-spacing: 0.05em;
+}
+
+.btn-teal {
+    background: #4e8683;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 700;
+    font-size: 1.0em;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-shadow: none;
+}
+
+.btn-teal:hover {
+    background: #3e6d6b;
+}
+
+.card-title-dark {
+    font-size: 1.4em;
+    font-weight: 800;
+    color: #000000;
     margin-bottom: 15px;
 }
 
-.connect-inputs > input {
-    width: 250px;
-    height: 38px;
+.remote-input-row {
+    flow: horizontal;
+    align-items: center;
+}
+
+.remote-input-row > input {
+    height: 40px;
+    font-size: 1.1em;
+    padding: 0 15px;
+    border-radius: 6px;
+    border: 1px solid #c0c4cc;
+    background: #ffffff;
+    color: #333333;
+    width: 300px;
+}
+
+.sessions-header {
+    flow: horizontal;
+    align-items: center;
+}
+
+.sessions-header .card-title-dark {
+    margin-bottom: 0;
+    margin-right: *;
+}
+
+.search-btn {
+    flow: horizontal;
+    align-items: center;
+    color: #000;
+    font-weight: 600;
+    font-size: 1.0em;
+    cursor: pointer;
+}
+
+.search-btn svg {
+    size: 16px;
+    margin-right: 6px;
+}
+
+.empty-sessions {
+    text-align: center;
     font-size: 1.2em;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    background: rgba(0,0,0,0.3);
-    color: #00ffff;
+    font-weight: 700;
+    color: #000;
+    margin: 40px 0;
 }
 
-.sessions-grid-section {
-    size: *;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 16px;
-    border: 1px solid rgba(0, 255, 255, 0.1);
-    padding: 20px;
+.sessions-footer {
+    border-top: 1px solid #ebeef5;
+    padding-top: 10px;
+    margin-top: 10px;
+    text-align: right;
+    font-size: 0.9em;
+    color: #000;
+    font-weight: 600;
 }
 
-/* Adjust MultipleSessions to grid */
+.login-status-sidebar {
+    margin-top: *;
+    padding: 15px;
+    text-align: center;
+    font-size: 0.85em;
+    color: #666;
+    white-space: normal;
+    word-wrap: normal;
+    word-break: keep-all;
+}
+
+.login-status-sidebar .connect-status {
+    flow: horizontal;
+    justify-content: center;
+    align-items: center;
+    white-space: normal;
+    word-wrap: normal;
+    word-break: keep-all;
+}
+
+/* Make MultipleSessions render well in light theme */
 .recent-sessions-content {
     flow: horizontal-flow;
     border-spacing: 15px;
@@ -724,6 +857,67 @@ button.outline:hover { background: rgba(0, 255, 255, 0.1); border-color: #00ffff
 }
 
 div.remote-session, div.remote-session-list {
+    background: #ffffff;
+    border: 1px solid #dcdfe6;
+    color: #333333;
     width: 220px;
     height: 60px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+div.remote-session:hover, div.remote-session-list:hover {
+    border-color: #4e8683;
+    box-shadow: 0 4px 12px rgba(78, 134, 131, 0.15);
+    background: #f7f9fa;
+}
+
+div.remote-session-list .name #alias {
+    color: #000000;
+}
+
+div.remote-session-list .name .username {
+    color: #666666;
+}
+
+
+/* MultipleSessions Light Theme Overrides */
+div.sessions-bar { border-top: 1px solid #ebeef5; color: #666; }
+div.sessions-tab span.active { background: #4e8683; color: #fff; }
+div.sessions-tab span:hover { background: rgba(78, 134, 131, 0.1); }
+div.search-id input { background: #f0f2f5; color: #333; border-radius: 4px; border: 1px solid #dcdfe6; height: 26px; }
+div.search-id span { color: #888; }
+div.search-id:hover span.clear-input { color: #555; }
+
+/* Password Area Light Theme Overrides */
+.desktop-card .your-desktop { border-left: none; padding-left: 0; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 15px; color: #ffffff; }
+.desktop-card .your-desktop > div { color: #c9d8da; text-transform: none; letter-spacing: normal; font-size: 0.95em; font-weight: 500; margin-bottom: 5px; }
+.desktop-card .your-desktop input[type=text] { color: #ffffff; text-shadow: none; font-weight: 600; font-size: 1.1em; background: rgba(0,0,0,0.15); padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
+.desktop-card svg#edit { color: #c9d8da; opacity: 0.8; }
+.desktop-card svg#edit:hover { color: #ffffff; opacity: 1; }
+
+/* Settings Redesign & Status Align */
+.system-banners { text-align: right; width: auto !important; right: 20px !important; bottom: 20px !important; }
+.connect-status, .service-status, .overlay-status { flow: horizontal; justify-content: flex-end; align-items: center; }
+
+div#myid {
+    display: inline-block;
+    position: absolute;
+    right: 0;
+    top: 0;
+    font-size: 0.7em;
+    font-weight: 500;
+    color: #4e8683;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+div#myid:hover {
+    background: #e8f0fe;
+}
+div#myid svg#menu {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-left: 4px;
 }

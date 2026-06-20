@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use hbb_common::{
     anyhow::anyhow,
     bail,

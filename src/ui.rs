@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{
     collections::{HashMap, VecDeque},
     iter::FromIterator,
@@ -160,11 +161,13 @@ pub fn start(args: &mut [String]) {
         frame.register_behavior("native-remote", move || {
             let id = CCTV_QUEUE.lock().unwrap().pop_front().unwrap_or_default();
             log::info!("[CCTV] creating session for peer: {}", id);
+            let mut args = vec![];
+            args.push("--cctv".to_string());
             let handler = remote::SciterSession::new(
                 "--connect".to_string(),
                 id,
                 "".to_string(),
-                vec![],
+                args,
             );
             Box::new(handler)
         });
@@ -301,6 +304,10 @@ impl UI {
 
     fn install_me(&mut self, _options: String, _path: String) {
         install_me(_options, _path, false, false);
+    }
+
+    fn set_custom_autorun(&mut self, enable: bool) {
+        crate::ui_interface::set_custom_autorun(enable);
     }
 
     fn update_me(&self, _path: String) {
@@ -641,12 +648,24 @@ impl UI {
         CCTV_QUEUE.lock().unwrap().clear();
     }
 
+    fn account_auth(&mut self, op: String, id: String, uuid: String, remember_me: bool) {
+        crate::ui_interface::account_auth(op, id, uuid, remember_me);
+    }
+
+    fn account_auth_cancel(&mut self) {
+        crate::ui_interface::account_auth_cancel();
+    }
+
+    fn account_auth_result(&mut self) -> String {
+        crate::ui_interface::account_auth_result()
+    }
+
     fn auth_login(&mut self, user_id: String) -> String {
         let rt = hbb_common::tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            use hbb_common::tokio::net::TcpStream;
+            
             use tokio_tungstenite::tungstenite::Message;
-            use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+            use tokio_tungstenite::connect_async;
             use hbb_common::futures_util::{SinkExt, StreamExt};
 
             let mut host = hbb_common::config::Config::get_option("custom-rendezvous-server");
@@ -872,16 +891,20 @@ impl UI {
 
     fn open_url(&self, url: String) {
         #[cfg(windows)]
-        let p = "explorer";
+        allow_err!(std::process::Command::new("cmd").arg("/c").arg("start").arg("").arg(url).spawn());
+        
         #[cfg(target_os = "macos")]
-        let p = "open";
+        allow_err!(std::process::Command::new("open").arg(url).spawn());
+        
         #[cfg(target_os = "linux")]
-        let p = if std::path::Path::new("/usr/bin/firefox").exists() {
-            "firefox"
-        } else {
-            "xdg-open"
-        };
-        allow_err!(std::process::Command::new(p).arg(url).spawn());
+        {
+            let p = if std::path::Path::new("/usr/bin/firefox").exists() {
+                "firefox"
+            } else {
+                "xdg-open"
+            };
+            allow_err!(std::process::Command::new(p).arg(url).spawn());
+        }
     }
 
     fn change_id(&self, id: String) {
@@ -1028,6 +1051,9 @@ impl sciter::EventHandler for UI {
         fn close_all_cctv();
         fn push_cctv_peer(String);
         fn clear_cctv_queue();
+        fn account_auth(String, String, String, bool);
+        fn account_auth_cancel();
+        fn account_auth_result();
         fn auth_login(String);
         fn send_wol(String);
         fn remove_peer(String);
@@ -1043,6 +1069,7 @@ impl sciter::EventHandler for UI {
         fn recent_sessions_updated();
         fn get_icon();
         fn install_me(String, String);
+        fn set_custom_autorun(bool);
         fn is_installed();
         fn get_supported_privacy_mode_impls();
         fn is_root();

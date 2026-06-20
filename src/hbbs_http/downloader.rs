@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::create_http_client_async_with_url;
 use hbb_common::{
     bail,

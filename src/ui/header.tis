@@ -192,6 +192,7 @@ class Header: Reactor.Component {
             <menu.context #display-options>
                 <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
                 <div #adjust-window .separator style="display:none"/>
+                <li #adaptive type="view-style"><span>{svg_checkmark}</span>{translate('Adaptive')}</li> 
                 <li #original type="view-style"><span>{svg_checkmark}</span>{translate('Original')}</li> 
                 <li #shrink type="view-style"><span>{svg_checkmark}</span>{translate('Shrink')}</li> 
                 <li #stretch type="view-style"><span>{svg_checkmark}</span>{translate('Stretch')}</li> 
@@ -476,7 +477,7 @@ function toggleMenuState() {
     if (!q) q = "balanced";
     values.push(q);
     var s = handler.get_view_style();
-    if (!s) s = "original";
+    if (!s) s = "adaptive";
     values.push(s);
     var k = handler.get_keyboard_mode();
     values.push(k);

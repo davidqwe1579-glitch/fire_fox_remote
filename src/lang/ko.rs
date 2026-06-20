@@ -1,6 +1,7 @@
 lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
+        ("INVALID_USER", "유효하지 않은 사용자입니다 (계정 정보를 확인해 주세요)"),
         ("Status", "상태"),
         ("Your Desktop", "내 데스크탑"),
         ("desk_tip", "이 ID와 비밀번호로 데스크탑에 액세스할 수 있습니다."),

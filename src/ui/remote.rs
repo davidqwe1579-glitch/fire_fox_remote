@@ -25,9 +25,7 @@ use crate::{
 
 type Video = AssetPtr<video_destination>;
 
-lazy_static::lazy_static! {
-    static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
-}
+
 
 /// SciterHandler
 /// * element
@@ -36,6 +34,7 @@ lazy_static::lazy_static! {
 pub struct SciterHandler {
     element: Arc<Mutex<Option<Element>>>,
     close_state: HashMap<String, String>,
+    video: Arc<Mutex<Option<Video>>>,
 }
 
 impl SciterHandler {
@@ -148,7 +147,7 @@ impl InvokeUiSession for SciterHandler {
         // Nothing spectacular in decoder – done on CPU side.
         // So if you can do BGRA translation on your side – the better.
         // BGRA is used as internal image format so it will not require additional transformations.
-        VIDEO.lock().unwrap().as_mut().map(|v| {
+        self.video.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
             log::info!("[video] reinitialized: {:?}", ok);
@@ -290,7 +289,7 @@ impl InvokeUiSession for SciterHandler {
     }
 
     fn on_rgba(&self, _display: usize, rgba: &mut scrap::ImageRgb) {
-        VIDEO
+        self.video
             .lock()
             .unwrap()
             .as_mut()
@@ -470,7 +469,7 @@ impl sciter::EventHandler for SciterSession {
                     }
                     let site = AssetPtr::adopt(ptr as *mut video_destination);
                     log::debug!("[video] start video");
-                    *VIDEO.lock().unwrap() = Some(site);
+                    *self.0.ui_handler.video.lock().unwrap() = Some(site);
                     self.reconnect(false);
                 }
             }

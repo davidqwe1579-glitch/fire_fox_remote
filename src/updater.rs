@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{common::do_check_software_update, hbbs_http::create_http_client_with_url};
 use hbb_common::{bail, config, log, ResultType};
 use std::{

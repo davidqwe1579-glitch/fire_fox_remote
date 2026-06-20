@@ -51,6 +51,7 @@ function adaptDisplay() {
     var h = display_height;
     if (!w || !h) return;
     var style = handler.get_view_style();
+    if (!style) style = "adaptive";
     display_scale = 1.;
     cursor_scale = 1.;
     var (sx, sy, sw, sh) = view.screenBox(view.windowState == View.WINDOW_FULL_SCREEN ? #frame : #workarea, #rectw);
@@ -82,7 +83,8 @@ function adaptDisplay() {
             var scale_y = bh.toFloat() / h;
             var scale = scale_x < scale_y ? scale_x : scale_y;
             if ((scale > 1 && style == "stretch") ||
-                (scale < 1 && style == "shrink")) {
+                (scale < 1 && style == "shrink") ||
+                style == "adaptive") {
                 display_scale = scale;
                 w = w * scale;
                 h = h * scale;

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use hbb_common::{fs, log, message_proto::*};
 
 use super::{Data, Interface};

@@ -14,3 +14,7 @@ rustflags = [
 #]
 [net]
 git-fetch-with-cli = true
+
+[build]
+# Use all available CPU cores for parallel compilation
+jobs = 24

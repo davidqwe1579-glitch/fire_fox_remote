@@ -38,7 +38,6 @@ use std::{
     },
     time::SystemTime,
 };
-use uuid::Uuid;
 
 use crate::client::io_loop::Remote;
 use crate::client::{
@@ -422,7 +421,9 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[cfg(feature = "flutter")]
     pub fn refresh_video(&self, display: i32) {
-        if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
+        if display == -1 {
+            self.send(Data::Message(LoginConfigHandler::refresh()));
+        } else if crate::common::is_support_multi_ui_session_num(self.lc.read().unwrap().version) {
             self.send(Data::Message(LoginConfigHandler::refresh_display(
                 display as _,
             )));
@@ -1758,6 +1759,14 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str) {
+        let is_cctv = self.args.iter().any(|a| a == "--cctv");
+        if is_cctv {
+            if msgtype.contains("password") || msgtype.contains("error") || msgtype.contains("2fa") {
+                self.close();
+                return;
+            }
+        }
+
         let direct = self.lc.read().unwrap().direct;
         let received = self.lc.read().unwrap().received;
         let retry_for_relay = direct == Some(true) && !received;

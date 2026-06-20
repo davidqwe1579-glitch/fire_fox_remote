@@ -2,7 +2,6 @@ use hbb_common::ResultType;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-#[cfg(feature = "flutter")]
 pub mod account;
 pub mod downloader;
 mod http_client;

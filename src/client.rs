@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::clipboard_listener;
 use async_trait::async_trait;
@@ -3393,6 +3394,9 @@ pub fn handle_login_error(
             false
         }
     } else {
+        if err.to_lowercase().contains("expired") || err.contains("만료") {
+            return false;
+        }
         if err.contains(SCRAP_X11_REQUIRED) {
             interface.msgbox("error", "Login Error", err, SCRAP_X11_REF_URL);
         } else {

@@ -247,7 +247,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                     self.handler.msgbox("restarting", "Restarting remote device", "remote_restarting_tip", "");
                                 } else {
                                     log::info!("Reset by the peer");
-                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
+                                    // self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
                                 }
                                 break;
                             }
@@ -265,7 +265,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         _ = self.timer.tick() => {
                             if last_recv_time.elapsed() >= SEC30 {
-                                self.handler.msgbox("error", "Connection Error", "Timeout", "");
+                                // self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
                             }
                             if !self.read_jobs.is_empty() {

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use hbb_common::password_security;
 use hbb_common::{
@@ -110,6 +111,26 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
             &_options, _path, _silent, _debug
         ));
         std::process::exit(0);
+    });
+}
+
+pub fn set_custom_autorun(enable: bool) {
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_str) = exe_path.to_str() {
+                let exe_str = exe_str.to_string();
+                if enable {
+                    let _ = std::process::Command::new("reg")
+                        .args(&["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "FirefoxCCTV", "/t", "REG_SZ", "/d", &format!("\"{}\"", exe_str), "/f"])
+                        .output();
+                } else {
+                    let _ = std::process::Command::new("reg")
+                        .args(&["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "FirefoxCCTV", "/f"])
+                        .output();
+                }
+            }
+        }
     });
 }
 
@@ -1284,7 +1305,7 @@ pub fn new_remote_cctv(id: String, remote_type: String, index: i32, total: i32) 
     let args = vec![
         format!("--{}", remote_type),
         id.clone(),
-        "".to_string(), // password placeholder
+        String::from_utf8(hbb_common::config::PeerConfig::load(&id).password).unwrap_or_default(),
         format!("--cctv-index={}", index),
         format!("--cctv-total={}", total),
     ];
@@ -1349,19 +1370,16 @@ fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     tx
 }
 
-#[cfg(feature = "flutter")]
 pub fn account_auth(op: String, id: String, uuid: String, remember_me: bool) {
-    account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
+    crate::hbbs_http::account::OidcSession::account_auth(get_api_server(), op, id, uuid, remember_me);
 }
 
-#[cfg(feature = "flutter")]
 pub fn account_auth_cancel() {
-    account::OidcSession::auth_cancel();
+    crate::hbbs_http::account::OidcSession::auth_cancel();
 }
 
-#[cfg(feature = "flutter")]
 pub fn account_auth_result() -> String {
-    serde_json::to_string(&account::OidcSession::get_result()).unwrap_or_default()
+    serde_json::to_string(&crate::hbbs_http::account::OidcSession::get_result()).unwrap_or_default()
 }
 
 #[cfg(feature = "flutter")]

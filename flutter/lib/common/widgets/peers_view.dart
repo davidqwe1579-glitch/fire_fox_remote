@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:dynamic_layouts/dynamic_layouts.dart';
 import 'package:flutter/foundation.dart';
@@ -19,7 +20,7 @@ import '../../models/platform_model.dart';
 import 'peer_card.dart';
 
 typedef PeerFilter = bool Function(Peer peer);
-typedef PeerCardBuilder = Widget Function(Peer peer);
+typedef PeerCardBuilder = Widget Function(Peer peer, [int? index]);
 
 class PeerSortType {
   static const String remoteId = 'Remote ID';
@@ -237,11 +238,11 @@ class _PeersViewState extends State<_PeersView>
             var peers = snapshot.data!;
             if (peers.length > 1000) peers = peers.sublist(0, 1000);
             gFFI.peerTabModel.setCurrentTabCachedPeers(peers);
-            buildOnePeer(Peer peer, bool isPortrait) {
+            buildOnePeer(Peer peer, bool isPortrait, [int? index]) {
               final visibilityChild = VisibilityDetector(
                 key: ValueKey(_cardId(peer.id)),
                 onVisibilityChanged: onVisibilityChanged,
-                child: widget.peerCardBuilder(peer),
+                child: widget.peerCardBuilder(peer, index),
               );
               // `Provider.of<PeerTabModel>(context)` will causes infinete loop.
               // Because `gFFI.peerTabModel.setCurrentTabCachedPeers(peers)` will trigger `notifyListeners()`.
@@ -267,28 +268,59 @@ class _PeersViewState extends State<_PeersView>
                 ? ListView.builder(
                     itemCount: peers.length,
                     itemBuilder: (BuildContext context, int index) {
-                      return buildOnePeer(peers[index], true).marginOnly(
+                      return buildOnePeer(peers[index], true, index).marginOnly(
                           top: index == 0 ? 0 : space / 2, bottom: space / 2);
                     },
                   )
                 : peerCardUiType.value == PeerUiType.list
-                    ? ListView.builder(
+                    ? (widget.peerTabIndex == PeerTabIndex.recent ? ReorderableListView.builder(
+                        scrollController: _scrollController,
+                        itemCount: peers.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          return Container(
+                            key: ValueKey(peers[index].id),
+                            child: buildOnePeer(peers[index], false, index).marginOnly(
+                                right: space,
+                                top: index == 0 ? 0 : space / 2,
+                                bottom: space / 2)
+                          );
+                        },
+                        onReorder: (int oldIndex, int newIndex) async {
+                          if (oldIndex < newIndex) {
+                            newIndex -= 1;
+                          }
+                          final Peer item = peers.removeAt(oldIndex);
+                          peers.insert(newIndex, item);
+                          
+                          int srcOldIndex = widget.peers.peers.indexWhere((p) => p.id == item.id);
+                          if (srcOldIndex != -1) {
+                            final srcItem = widget.peers.peers.removeAt(srcOldIndex);
+                            int srcNewIndex = newIndex < peers.length - 1 ? widget.peers.peers.indexWhere((p) => p.id == peers[newIndex + 1].id) : widget.peers.peers.length;
+                            if (srcNewIndex == -1) srcNewIndex = widget.peers.peers.length;
+                            widget.peers.peers.insert(srcNewIndex, srcItem);
+                          }
+
+                          final order = peers.map((e) => e.id).toList();
+                          await bind.setLocalOption(k: 'recent_order', v: jsonEncode(order));
+                          setState(() {});
+                        },
+                      ) : ListView.builder(
                         controller: _scrollController,
                         itemCount: peers.length,
                         itemBuilder: (BuildContext context, int index) {
-                          return buildOnePeer(peers[index], false).marginOnly(
+                          return buildOnePeer(peers[index], false, index).marginOnly(
                               right: space,
                               top: index == 0 ? 0 : space / 2,
                               bottom: space / 2);
                         },
-                      )
+                      ))
                     : DynamicGridView.builder(
                         gridDelegate: SliverGridDelegateWithWrapping(
                             mainAxisSpacing: space / 2,
                             crossAxisSpacing: space),
                         itemCount: peers.length,
                         itemBuilder: (BuildContext context, int index) {
-                          return buildOnePeer(peers[index], false);
+                          return buildOnePeer(peers[index], false, index);
                         }));
 
             if (updateEvent == UpdateEvent.load) {
@@ -456,9 +488,10 @@ class RecentPeersView extends BasePeersView {
       : super(
           key: key,
           peerTabIndex: PeerTabIndex.recent,
-          peerCardBuilder: (Peer peer) => RecentPeerCard(
+          peerCardBuilder: (Peer peer, [int? index]) => RecentPeerCard(
             peer: peer,
             menuPadding: menuPadding,
+            index: index,
           ),
         );
 
@@ -476,7 +509,7 @@ class FavoritePeersView extends BasePeersView {
       : super(
           key: key,
           peerTabIndex: PeerTabIndex.fav,
-          peerCardBuilder: (Peer peer) => FavoritePeerCard(
+          peerCardBuilder: (Peer peer, [int? index]) => FavoritePeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
@@ -496,7 +529,7 @@ class DiscoveredPeersView extends BasePeersView {
       : super(
           key: key,
           peerTabIndex: PeerTabIndex.lan,
-          peerCardBuilder: (Peer peer) => DiscoveredPeerCard(
+          peerCardBuilder: (Peer peer, [int? index]) => DiscoveredPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
@@ -519,7 +552,7 @@ class AddressBookPeersView extends BasePeersView {
           peerTabIndex: PeerTabIndex.ab,
           peerFilter: (Peer peer) =>
               _hitTag(gFFI.abModel.selectedTags, peer.tags),
-          peerCardBuilder: (Peer peer) => AddressBookPeerCard(
+          peerCardBuilder: (Peer peer, [int? index]) => AddressBookPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),
@@ -561,7 +594,7 @@ class MyGroupPeerView extends BasePeersView {
           key: key,
           peerTabIndex: PeerTabIndex.group,
           peerFilter: filter,
-          peerCardBuilder: (Peer peer) => MyGroupPeerCard(
+          peerCardBuilder: (Peer peer, [int? index]) => MyGroupPeerCard(
             peer: peer,
             menuPadding: menuPadding,
           ),

@@ -30,12 +30,14 @@ class _PeerCard extends StatefulWidget {
   final PeerTabIndex tab;
   final Function(BuildContext, String) connect;
   final PopupMenuEntryBuilder popupMenuEntryBuilder;
+  final int? index;
 
   const _PeerCard(
       {required this.peer,
       required this.tab,
       required this.connect,
       required this.popupMenuEntryBuilder,
+      this.index,
       Key? key})
       : super(key: key);
 
@@ -140,6 +142,11 @@ class _PeerCardState extends State<_PeerCard>
         color: Theme.of(context).textTheme.titleLarge?.color?.withOpacity(0.6));
     final showNote = _showNote(peer);
 
+    String title = peer.alias.isEmpty ? formatID(peer.id) : peer.alias;
+    if (widget.index != null && widget.tab == PeerTabIndex.recent) {
+        title = '${widget.index! + 1}. $title';
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
@@ -186,7 +193,7 @@ class _PeerCardState extends State<_PeerCard>
                         getOnline(isPortrait ? 4 : 8, peer.online),
                         Expanded(
                             child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          title,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
@@ -285,6 +292,11 @@ class _PeerCardState extends State<_PeerCard>
     final name = hideUsernameOnCard == true
         ? peer.hostname
         : '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
+
+    String title = peer.alias.isEmpty ? formatID(peer.id) : peer.alias;
+    if (widget.index != null && widget.tab == PeerTabIndex.recent) {
+        title = '${widget.index! + 1}. $title';
+    }
     final child = Card(
       color: Colors.transparent,
       elevation: 0,
@@ -368,7 +380,7 @@ class _PeerCardState extends State<_PeerCard>
                         getOnline(8, peer.online),
                         Expanded(
                             child: Text(
-                          peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
+                          title,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall,
                         )),
@@ -507,9 +519,10 @@ abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
   final PeerTabIndex tab;
   final EdgeInsets? menuPadding;
+  final int? index;
 
   BasePeerCard(
-      {required this.peer, required this.tab, this.menuPadding, Key? key})
+      {required this.peer, required this.tab, this.menuPadding, this.index, Key? key})
       : super(key: key);
 
   @override
@@ -517,6 +530,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _PeerCard(
       peer: peer,
       tab: tab,
+      index: index,
       connect: (BuildContext context, String id) =>
           connectInPeerTab(context, peer, tab),
       popupMenuEntryBuilder: _buildPopupMenuEntry,
@@ -956,11 +970,12 @@ abstract class BasePeerCard extends StatelessWidget {
 }
 
 class RecentPeerCard extends BasePeerCard {
-  RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, Key? key})
+  RecentPeerCard({required Peer peer, EdgeInsets? menuPadding, int? index, Key? key})
       : super(
             peer: peer,
             tab: PeerTabIndex.recent,
             menuPadding: menuPadding,
+            index: index,
             key: key);
 
   @override
