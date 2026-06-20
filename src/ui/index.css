@@ -607,28 +607,19 @@ textarea.grey-text {
 }
 
 .cctv-label {
-    display: none;
-    position: absolute;
-    top: 0;
-    left: 0;
+    display: block;
     width: *;
-    background: rgba(226, 232, 240, 0.9);
+    background: #e2e8f0;
     border-bottom: 1px solid #cbd5e1;
     padding: 8px 12px;
     color: #1e293b;
     font-family: system-ui, sans-serif;
     font-weight: 700;
     font-size: 12px;
-    z-index: 10;
-}
-
-.cctv-cell:hover .cctv-label {
-    display: block;
 }
 
 .cctv-cell video {
     behavior: native-remote video;
-    prototype: CctvVideo;
     size: *;
     margin: 0;
     padding: 0;

@@ -51,6 +51,10 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 	<circle cx="256" cy="64" r="64"/>
 </svg>;
 var svg_refresh_password = <svg #refresh-password xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/></svg>;
+var svg_my_pc = <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>;
+var svg_remote = <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="4" ry="4"></rect><circle cx="12" cy="18" r="1.5"></circle><line x1="10" y1="6" x2="14" y2="6"></line></svg>;
+var svg_settings_cog = <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+var svg_search = <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>;
 
 var my_id = handler.get_id();
 function get_id() {
@@ -361,6 +365,7 @@ function getUserName() {
 }
 
 function getAccountLabelWithHandle() {
+    handler.set_local_option("window-rect", "");
     try {
         var user = JSON.parse(handler.get_local_option("user_info"));
         var username = (user.name || '').trim();
@@ -574,7 +579,7 @@ class MyIdMenu: Reactor.Component {
     }
 
     function toggleMenuState() {
-        for (var el in $$(menu#config-options>li)) {
+        for (var el in $$(ul#config-options>li)) {
             var id = el.id;
             if (!id) continue;
             var is_opt_fixed = handler.is_option_fixed(id);
@@ -615,7 +620,7 @@ class MyIdMenu: Reactor.Component {
         }, 400, get_msgbox_width());
     }
 
-    event click $(menu#config-options>li) (_, me) {
+    event click $(ul#config-options>li) (_, me) {
         if (me.state.disabled) return;
         if (me.id && me.id.indexOf("enable-") == 0) {
             handler.set_option(me.id, handler.get_option(me.id) == "N" ? default_option_yes : "N");
@@ -708,38 +713,27 @@ class App: Reactor.Component
     function this() {
         app = this;
         this.cctv_cell_size = 300;
-        this.is_logged_in = false;
-        this.login_id = handler.get_option("saved-login-id") || "";
-        this.login_error = "";
+        this.cctv_auto_fit = true;
         this.auto_login = handler.get_option("auto-login") == "Y";
-        this.is_autologin_active = false;
-        this.countdown = 0;
+        this.login_id = handler.get_option("saved-login-id") || "";
+        this.start_on_boot = handler.get_option("custom_start_on_boot") == "Y";
+        this.is_logged_in = this.auto_login && this.login_id != "";
+        this.active_tab = 'my_pc';
+        this.cctv_drag_elem = null;
+        this.cctv_drag_start_x = 0;
+        this.cctv_drag_start_y = 0;
+        this.cctv_drag_source_idx = -1;
     }
 
     function attached() {
-        var app = this;
-        if (app.auto_login && app.login_id) {
-            app.is_autologin_active = true;
-            app.countdown = 3;
-            app.login_error = "Auto login in " + app.countdown + "s...";
-            app.update();
-            
-            app.timer(1s, function() {
-                if (!app.is_autologin_active) return false;
-                app.countdown--;
-                if (app.countdown <= 0) {
-                    app.is_autologin_active = false;
-                    app.login_error = "Connecting to server...";
-                    app.update();
-                    app.perform_login();
-                    return false;
-                } else {
-                    app.login_error = "Auto login in " + app.countdown + "s...";
-                    app.update();
-                    return true;
-                }
-            });
-        }
+    }
+
+    event click $(button#custom-logout) () {
+        this.is_logged_in = false;
+        this.auto_login = false;
+        handler.set_option("auto-login", "N");
+        handler.set_option("saved-login-id", "");
+        this.update();
     }
 
     event click $(button#btn-login) () {
@@ -750,14 +744,13 @@ class App: Reactor.Component
         try {
             var id = (this.login_id || "").toString().replace(/\s/g, "");
             if (!id) {
-                this.login_error = "";
+                this.login_error = "아이디를 입력하세요.";
                 this.update();
-                msgbox("custom-error", "Input Required", "Please enter a valid User ID.");
                 return;
             }
             
             var app = this;
-            app.login_error = "Connecting to server...";
+            app.login_error = "인증 서버에 연결 중...";
             app.update();
             
             app.timer(20ms, function() {
@@ -772,6 +765,7 @@ class App: Reactor.Component
                             handler.set_option("saved-login-id", "");
                         }
                         
+                        app.login_error = "";
                         app.is_logged_in = true;
                         app.update();
                         
@@ -784,21 +778,24 @@ class App: Reactor.Component
                                 view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
                             }
                         } else {
-                            centerize(scaleIt(incoming_only ? incoming_only_width : 800), scaleIt(incoming_only ? 390 : 600));
+                            centerize(scaleIt(incoming_only ? incoming_only_width : 700), scaleIt(incoming_only ? 390 : 540));
                         }
+                        return false;
                     } else {
                         app.login_error = "";
                         app.update();
-                        msgbox("custom-error", "Authentication Failed", resp || "Undefined response");
+                        msgbox("custom-error", "인증 실패", resp || "알 수 없는 오류");
                     }
                 } catch (e) {
                     app.login_error = "";
                     app.update();
-                    msgbox("custom-error", "Error", "TIS Exception: " + e.toString());
+                    msgbox("custom-error", "오류", "시스템 오류: " + e.toString());
                 }
+                return false;
             });
-        } catch (global_err) {
-            msgbox("custom-error", "Error", "Outer Exception: " + global_err.toString());
+        } catch(e) {
+            this.login_error = "요청 중 오류 발생";
+            this.update();
         }
     }
 
@@ -807,11 +804,19 @@ class App: Reactor.Component
         this.auto_login = false;
         this.login_error = "Auto login cancelled.";
         handler.set_option("auto-login", "N");
+        handler.account_auth_cancel();
         this.update();
     }
 
     event click $(button#auto-login) (evt, el) {
         this.auto_login = el.state.checked;
+        this.update();
+    }
+
+    event click $(button#start-on-boot) (evt, el) {
+        this.start_on_boot = el.state.checked;
+        handler.set_option("custom_start_on_boot", this.start_on_boot ? "Y" : "N");
+        handler.set_custom_autorun(this.start_on_boot);
         this.update();
     }
 
@@ -830,31 +835,38 @@ class App: Reactor.Component
         
         if (!this.is_logged_in) {
             return
-                <div style="size: *; background: linear-gradient(135deg, #09090b, #121218); font-family: system-ui, sans-serif;">
-                    <div style="margin: *; width: 320px; padding: 25px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,255,255,0.2); border-radius: 12px; box-shadow: 0 6px 25px rgba(0,255,255,0.1); text-align: center; flow: vertical;">
-                        <h1 style="color: #00ffff; font-weight: 800; font-size: 1.6em; margin-top: 0; margin-bottom: 8px; text-shadow: 0 0 10px rgba(0,255,255,0.5);">FireFox CCTV</h1>
-                        <div style="color: #889; margin-bottom: 20px; font-weight: 600; font-size: 0.9em;">System Authentication Required</div>
+                <div style="size: *; background: #f5f7fa; font-family: system-ui, sans-serif;">
+                    <div style="width: 280px; height: max-intrinsic; margin: *; padding: 25px; background: #ffffff; border: 1px solid #ebeef5; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.05); text-align: center; flow: vertical;">
+                        <h1 style="color: #4e8683; font-weight: 800; font-size: 1.5em; margin-top: 0; margin-bottom: 6px;">파이어폭스 CCTV</h1>
+                        <div style="color: #666; margin-bottom: 20px; font-weight: 500; font-size: 0.9em;">시스템 인증이 필요합니다</div>
                         
-                        <div style="margin-bottom: 12px; text-align: left; flow: vertical;">
-                            <label style="color: #00ffff; font-weight: bold; font-size: 0.85em; margin-bottom: 6px; display: block;">User ID</label>
-                            <input #login-id type="text" value={this.login_id || ""} style="width: *; height: 36px; background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,255,0.3); border-radius: 6px; color: white; padding: 0 12px; font-size: 1em; outline: none; transition: color 0.3s;" placeholder="Enter your User ID" />
-                        </div>
-
-                        <div style="margin-bottom: 15px; text-align: left; flow: horizontal;">
-                            <button|checkbox #auto-login checked={this.auto_login} style="color: #889; font-size: 0.85em; font-weight: 600; cursor: pointer;">자동 로그인</button>
+                        <div style="margin-bottom: 15px; text-align: left; flow: vertical;">
+                            <label style="color: #333; font-weight: 600; font-size: 0.85em; margin-bottom: 6px; display: block;">사용자 아이디</label>
+                            <input #login-id type="text" value={this.login_id || ""} style="width: *; height: 36px; background: #f8f9fa; border: 1px solid #dcdfe6; border-radius: 6px; color: #333; padding: 0 10px; font-size: 0.95em; outline: none; transition: border-color 0.3s;" placeholder="아이디 입력" />
                         </div>
                         
-                        {this.login_error ? <div style="color: #ff3366; margin-bottom: 12px; font-weight: bold; font-size: 0.9em; text-shadow: 0 0 5px rgba(255,51,102,0.5);">{this.login_error}</div> : ""}
+                        <div style="margin-bottom: 15px; text-align: left; flow: horizontal; border-spacing: 15px;">
+                            <div style="flow: horizontal; vertical-align: middle;">
+                                <button #auto-login type="checkbox" checked={this.auto_login} style="margin-right: 4px; vertical-align: middle;" />
+                                <label style="color: #666; font-size: 0.85em; cursor: pointer; vertical-align: middle;">자동 로그인</label>
+                            </div>
+                            <div style="flow: horizontal; vertical-align: middle;">
+                                <button #start-on-boot type="checkbox" checked={this.start_on_boot} style="margin-right: 4px; vertical-align: middle;" />
+                                <label style="color: #666; font-size: 0.85em; cursor: pointer; vertical-align: middle;">부팅시 자동 실행</label>
+                            </div>
+                        </div>
                         
-                        {this.is_autologin_active ?
-                            <button #btn-cancel style="display: block; width: *; height: 40px; background: linear-gradient(135deg, #9f1239, #f43f5e); color: white; border: none; border-radius: 6px; font-weight: 800; font-size: 1em; cursor: pointer; box-shadow: 0 4px 15px rgba(244,63,94,0.4); transition: color 0.2s;">
-                                CANCEL
+                        {this.login_error ? <div style="color: #f56c6c; margin-bottom: 12px; font-weight: 600; font-size: 0.85em;">{this.login_error}</div> : ""}
+                        
+                        <div style="flow: horizontal; gap: 8px;">
+                            <button #btn-login style="width: *; height: 38px; background: #4e8683; color: white; border: none; border-radius: 6px; font-weight: 700; font-size: 0.95em; cursor: pointer; box-shadow: 0 3px 8px rgba(78,134,131,0.2); transition: background 0.2s;">
+                                로그인
                             </button>
-                            :
-                            <button #btn-login style="display: block; width: *; height: 40px; background: linear-gradient(135deg, #00c6ff, #0072ff); color: white; border: none; border-radius: 6px; font-weight: 800; font-size: 1em; cursor: pointer; box-shadow: 0 4px 15px rgba(0,114,255,0.4); transition: color 0.2s;">
-                                LOGIN
-                            </button>
-                        }
+                            {this.is_autologin_active ? 
+                            <button #btn-cancel style="width: 70px; height: 38px; background: #f56c6c; color: white; border: none; border-radius: 6px; font-weight: 700; font-size: 0.95em; cursor: pointer; box-shadow: 0 3px 8px rgba(245,108,108,0.2); transition: background 0.2s;">
+                                취소
+                            </button> : ""}
+                        </div>
                     </div>
                 </div>;
         }
@@ -862,16 +874,19 @@ class App: Reactor.Component
         if (this.show_cctv) {
             return
                 <div .app>
-                    <div #cctv-view style="size: *; padding: 0; background: linear-gradient(135deg, #09090b, #121218); overflow: hidden; flow: vertical;">
-                        <div style="flow: horizontal; height: 36px; line-height: 36px; padding: 2px 15px; background: linear-gradient(to bottom, #161622, #0d0d15); border-bottom: 1px solid rgba(0,255,255,0.1);">
-                            <span style="font-size: 1.1em; color: #00ffff; font-weight: 800; vertical-align: middle; font-family: system-ui, sans-serif; text-shadow: 0 0 10px rgba(0,255,255,0.5); margin-right: 20px;">CCTV DASHBOARD</span>
-                            <span style="color: #667; font-size: 0.8em; margin-left: 15px; vertical-align: middle; font-family: system-ui, sans-serif; font-weight: 600;">CELL SIZE:</span>
-                            <input #cctv-size-slider type="hslider" style="width: 180px; margin: 0 10px; vertical-align: middle;" min="50" max="800" step="10" value={this.cctv_cell_size || 300} />
-                            <span #cctv-size-label style="color: #00ffff; font-size: 0.85em; font-weight: 700; font-family: system-ui, sans-serif; vertical-align: middle; min-width: 40px; text-shadow: 0 0 5px rgba(0,255,255,0.3);">{this.cctv_cell_size || 300}px</span>
-                            <button .button #cctv-reboot-all style="margin-left: 10px; background: linear-gradient(135deg, #9a3412, #f97316); color: white; border: 1px solid rgba(249,115,22,0.5); border-radius: 12px; padding: 0 16px; height: 26px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 8px rgba(249,115,22,0.3); transition: all 0.2s;">모든 컴퓨터 재부팅</button>
-                            <button .button #cctv-close style="margin-left: *; background: linear-gradient(135deg, #9f1239, #f43f5e); color: white; border: 1px solid rgba(244,63,94,0.5); border-radius: 12px; padding: 0 16px; height: 26px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 8px rgba(244,63,94,0.3); transition: all 0.2s;">✕ CLOSE</button>
+                    <div #cctv-view style="size: *; padding: 0; background: #f5f7fa; overflow: hidden; flow: vertical;">
+                        <div style="flow: horizontal; height: 40px; line-height: 40px; padding: 2px 20px; background: #ffffff; border-bottom: 1px solid #ebeef5; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+                            <button type="checkbox" #cctv-auto-fit checked={this.cctv_auto_fit !== false} style="vertical-align: middle; margin-right: 5px;"/>
+                            <label style="color: #666; font-size: 0.85em; margin-right: 15px; vertical-align: middle; cursor: pointer; font-family: system-ui, sans-serif; font-weight: 600;">자동맞춤</label>
+                            
+                            <span style="color: #666; font-size: 0.85em; margin-right: 15px; vertical-align: middle; font-family: system-ui, sans-serif; font-weight: 600;">CELL SIZE:</span>
+                            <input #cctv-size-slider type="hslider" style="width: 180px; margin: 0 10px; vertical-align: middle;" min="50" max="800" step="10" value={this.cctv_cell_size || 300} disabled={this.cctv_auto_fit !== false} />
+                            <span #cctv-size-label style="color: #333; font-size: 0.85em; font-weight: 700; font-family: system-ui, sans-serif; vertical-align: middle; min-width: 40px;">{this.cctv_cell_size || 300}px</span>
+                            
+                            <button .button #cctv-reboot-all style="margin-left: 10px; background: #d97706; color: white; border: none; border-radius: 6px; padding: 0 16px; height: 28px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 4px rgba(217,119,6,0.2); transition: all 0.2s;">전체 일괄 재시작</button>
+                            <button .button #cctv-close style="margin-left: *; background: #e11d48; color: white; border: none; border-radius: 6px; padding: 0 16px; height: 28px; font-weight: 600; font-family: system-ui, sans-serif; cursor: pointer; vertical-align: middle; font-size: 0.8em; box-shadow: 0 2px 4px rgba(225,29,72,0.2); transition: all 0.2s;">창 CLOSE</button>
                         </div>
-                        <div #cctv-grid-container style="size: *; flow: horizontal-flow; background: transparent; overflow-y: auto; overflow-x: hidden; padding: 10px; border-spacing: 0;">
+                        <div #cctv-grid-container style="size: *; flow: horizontal-wrap; background: transparent; overflow-y: auto; overflow-x: hidden; padding: 10px; border-spacing: 0;">
                             { (function() {
                                 var cells = [];
                                 var sessions = app.cctv_sessions || handler.get_recent_sessions() || [];
@@ -895,8 +910,8 @@ class App: Reactor.Component
                                     
                                     if (session) {
                                         cells.push(
-                                            <div .cctv-cell id={cell_id} style={cell_style} index={i}>
-                                                <div .cctv-label>
+                                            <div .cctv-cell id={cell_id} key={session[0]} style={cell_style} index={i}>
+                                                <div .cctv-label style="cursor: move;">
                                                     {header_text}
                                                 </div>
                                                 <video />
@@ -905,8 +920,8 @@ class App: Reactor.Component
                                     } else {
                                         cells.push(
                                             <div .cctv-cell .empty id={cell_id} style={cell_style} index={i}>
-                                                <div .cctv-label style="color: #444;">
-                                                    {header_text}
+                                                <div .cctv-label style="color: #666;">
+                                                    {header_text} - 비어있음
                                                 </div>
                                             </div>
                                         );
@@ -924,40 +939,54 @@ class App: Reactor.Component
 
         return
             <div .dashboard-app>
-                <div .top-header>
-                    <div .brand-title>FireFox CCTV</div>
-                    <div .top-nav-items>
-                        {outgoing_only ? <span .link #open-settings style="margin-left: 10px;">{svg_menu}</span> : ""}
-                        {!outgoing_only && <div .my-credentials style="flow:horizontal; align-items:center;">
-                            <div .your-desktop style="margin-right: 15px;">
-                                <div>{translate('Your Desktop')}</div>
-                                <div style="flow:horizontal; align-items:center; margin-top: 4px;">
-                                    <MyIdMenu />
-                                    {get_id() ? <input type="text" readonly value={formatId(get_id())} style="background:transparent; border:none; color:#00ffff; font-weight:bold; width:130px; margin-left: 8px;"/> : translate("Generating ...")}
-                                </div>
-                            </div>
-                            <PasswordArea />
-                            <button .button #cctv-connect style="margin-left: 20px; margin-top: 6px; height: 32px; padding: 0 15px; font-weight: bold; background: linear-gradient(135deg, #00c6ff, #0072ff); color: white; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,114,255,0.4); font-size: 0.9em;">CCTV Mode</button>
-                        </div>}
+                <div style="display:none;">
+                </div>
+                <div .sidebar>
+                    <div class={"nav-item " + (this.active_tab == 'my_pc' ? "active" : "")} #tab-my-pc>
+                        {svg_my_pc}
+                        <div>내 PC</div>
+                    </div>
+                    <div class={"nav-item " + (this.active_tab == 'remote' ? "active" : "")} #tab-remote>
+                        {svg_remote}
+                        <div>원격 제어</div>
+                    </div>
+                    
+                    <div .login-status-sidebar>
+                        {this.is_logged_in ? <div style="font-weight: 600; color: #4e8683; margin-bottom: 5px;">계정:</div> : ""}
+                        {this.is_logged_in ? <div>{this.login_id}</div> : ""}
+                        <button .btn-teal #custom-logout style="width: 80px; margin: 10px auto 0 auto; display: block; font-size: 0.85em; padding: 6px 0;">
+                            {this.is_logged_in ? "로그아웃" : "로그인"}
+                        </button>
+                        <div style="margin-top: 15px;">
+                            <ConnectStatus @{this.connect_status} />
+                        </div>
                     </div>
                 </div>
 
-                <div .main-content style={incoming_only ? "display:none;" : ""}>
-                    <div .hero-connect-section>
-                        <div .title>{translate('Control Remote Desktop')}</div>
-                        <div .connect-inputs style="flow:horizontal; align-items:center;">
-                            <ID @{this.remote_id} />
-                            <div .right-buttons style="flow:horizontal; margin-left: 15px;">
-                                <button .button .outline #add-peer>{"추가"}</button>
-                                <button .button .outline #file-transfer style="margin-left:10px;">{translate('Transfer file')}</button>
-                                <button .button #connect style="margin-left:10px;">{translate('Connect')}</button>
-                            </div>
+                <div .main-area style={incoming_only ? "display:none;" : ""}>
+
+                    
+                    <div .new-card .desktop-card style={this.active_tab == 'my_pc' ? "" : "display:none;"}>
+                        <div .desktop-info style="position: relative;">
+                            <div .card-title>내 데스크탑 <MyIdMenu /></div>
+                            <div .card-subtitle>ID: {formatId(get_id()) || translate("Generating ...")}</div>
+                            <PasswordArea />
+                        </div>
+                        <button .btn-teal #cctv-connect style="margin-top:auto;">CCTV Mode</button>
+                    </div>
+                    
+                    <div .new-card style={this.active_tab == 'remote' ? "" : "display:none;"}>
+                        <div .card-title-dark>원격 제어</div>
+                        <div .remote-input-row>
+                            <ID @{this.remote_id} novalue="원격 ID 입력" />
+                            <button .btn-teal #connect style="margin-left: 10px; width: 80px;">연결</button>
                         </div>
                     </div>
-
-                    <div .sessions-grid-section>
-                        <div .title style="margin-bottom: 15px;">Recent Sessions</div>
-                        <MultipleSessions @{this.multipleSessions} />
+                    
+                    <div .new-card style={this.active_tab == 'remote' ? "size: *; padding: 10px 24px;" : "display:none;"}>
+                        <div style="margin-top: 5px; overflow-y: auto; size: *;">
+                            <MultipleSessions @{this.multipleSessions} />
+                        </div>
                     </div>
                 </div>
 
@@ -970,7 +999,6 @@ class App: Reactor.Component
                         {system_error ? <SystemError /> : ""}
                         {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                         {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
-                        <ConnectStatus @{this.connect_status} />
                     </div>
                 </div>
 
@@ -1000,6 +1028,28 @@ class App: Reactor.Component
         this.newRemote("file-transfer");
     }
 
+    event click $(button#rustdesk-login) () {
+        login();
+    }
+
+    event click $(#tab-my-pc) {
+        this.active_tab = 'my_pc';
+        this.update();
+    }
+
+    event click $(#tab-remote) {
+        this.active_tab = 'remote';
+        this.update();
+    }
+
+    event click $(#tab-settings) {
+        this.active_tab = 'settings';
+        this.update();
+        self.timer(10ms, function() {
+            if (myIdMenu) myIdMenu.showSettingMenu();
+        });
+    }
+
     event click $(button#cctv-connect) {
         var sessions = handler.get_recent_sessions();
         if (!sessions || sessions.length == 0) {
@@ -1011,13 +1061,53 @@ class App: Reactor.Component
         handler.close_all_cctv();
         this.cctv_sessions = [];
         handler.clear_cctv_queue();
-        for (var i = 0; i < total; ++i) {
-            this.cctv_sessions.push(sessions[i]);
-            handler.push_cctv_peer(sessions[i][0]);
-        }
-        
         this.show_cctv = true;
         this.update();
+        
+        var self_app = this;
+        this.cctv_render_id = (this.cctv_render_id || 0) + 1;
+        var render_id = this.cctv_render_id;
+        var idx = 0;
+        
+        function push_next() {
+            if (self_app.cctv_render_id != render_id) return;
+            if (!self_app.show_cctv) return;
+            if (idx >= total) return;
+            
+            self_app.cctv_sessions.push(sessions[idx]);
+            handler.push_cctv_peer(sessions[idx][0]);
+            self_app.update();
+            
+            idx++;
+            self_app.timer(100ms, push_next);
+        }
+        
+        self_app.timer(100ms, push_next);
+        
+        if (!this.cctv_auto_refresh_started) {
+            this.cctv_auto_refresh_started = true;
+            function auto_refresh() {
+                if (!self_app.show_cctv) return;
+                var videos = self_app.$$(video);
+                if (videos && videos.length > 0) {
+                    for (var v in videos) {
+                        if (!v.onClose) {
+                            v.onClose = function() {
+                                this.is_closed = true;
+                            };
+                        }
+                        if (v.is_closed) {
+                            v.is_closed = false;
+                            if (v.reconnect) v.reconnect(false);
+                        } else if (v.refresh_video) {
+                            v.refresh_video(-1);
+                        }
+                    }
+                }
+                self_app.timer(3s, auto_refresh);
+            }
+            self_app.timer(3s, auto_refresh);
+        }
     }
 
     event click $(button#cctv-close) {
@@ -1027,11 +1117,7 @@ class App: Reactor.Component
         this.update();
     }
 
-    event size (evt) {
-        if (this.show_cctv) {
-            this.timer(50ms, updateCctvLayout);
-        }
-    }
+
 
     event click $(button#cctv-reboot-all) {
         var videos = this.$$(video);
@@ -1044,7 +1130,6 @@ class App: Reactor.Component
                 for (var v in videos) {
                     if (v.restart_remote_device) {
                         v.restart_remote_device();
-                        if (v.cctv_reconnect) v.cctv_reconnect();
                     }
                 }
             }
@@ -1060,6 +1145,84 @@ class App: Reactor.Component
         var lbl = $(span#cctv-size-label);
         if (lbl) lbl.text = v.toString() + "px";
         updateCctvLayout();
+    }
+    
+    event change $(button#cctv-auto-fit) (evt) {
+        this.cctv_auto_fit = evt.target.value;
+        app.cctv_auto_fit = this.cctv_auto_fit;
+        var slider = $(input#cctv-size-slider);
+        if (slider) slider.state.disabled = this.cctv_auto_fit;
+        updateCctvLayout();
+    }
+    
+    event mousedown $(.cctv-label) (evt) {
+        if (!evt.mainButton) return false;
+        var cell = evt.target.$p(.cctv-cell);
+        if (cell) {
+            this.cctv_drag_elem = cell;
+            this.cctv_drag_source_idx = cell.attributes["index"].toInteger();
+            this.cctv_drag_start_x = evt.xView;
+            this.cctv_drag_start_y = evt.yView;
+            cell.capture(true);
+            cell.style#opacity = 0.7;
+            cell.style#z-index = 100;
+        }
+        return true;
+    }
+
+    event mousemove $(.cctv-cell) (evt) {
+        if (this.cctv_drag_elem && evt.mainButton) {
+            var dx = evt.xView - this.cctv_drag_start_x;
+            var dy = evt.yView - this.cctv_drag_start_y;
+            this.cctv_drag_elem.style#transform = String.printf("translate(%dpx, %dpx)", dx, dy);
+        }
+    }
+    
+    event mouseup $(.cctv-cell) (evt) {
+        if (this.cctv_drag_elem) {
+            this.cctv_drag_elem.style#opacity = 1.0;
+            this.cctv_drag_elem.style#z-index = 0;
+            this.cctv_drag_elem.style#transform = "none";
+            this.cctv_drag_elem.capture(false);
+            
+            var dx = evt.xView - this.cctv_drag_start_x;
+            var dy = evt.yView - this.cctv_drag_start_y;
+            
+            var cell_w = app.cell_w || 300;
+            var cell_h = app.cell_h || 200;
+            
+            var cols_offset = Math.round(dx.toFloat() / cell_w.toFloat()).toInteger();
+            var rows_offset = Math.round(dy.toFloat() / cell_h.toFloat()).toInteger();
+            
+            var cols = ($(div#cctv-grid-container).box(#width, #inner) / cell_w).toInteger();
+            if (cols < 1) cols = 1;
+            
+            var swap_idx = this.cctv_drag_source_idx + cols_offset + (rows_offset * cols);
+            
+            if (swap_idx >= 0 && swap_idx < this.cctv_sessions.length && swap_idx != this.cctv_drag_source_idx) {
+                var item = this.cctv_sessions[this.cctv_drag_source_idx];
+                this.cctv_sessions.remove(this.cctv_drag_source_idx);
+                
+                if (swap_idx >= this.cctv_sessions.length) {
+                    this.cctv_sessions.push(item);
+                } else {
+                    this.cctv_sessions.insert(swap_idx, item);
+                }
+                
+                var order = [];
+                for (var s in this.cctv_sessions) {
+                    order.push(s[0]);
+                }
+                handler.set_option("recent_order", JSON.stringify(order));
+                
+                this.update();
+                self.timer(10ms, updateCctvLayout);
+            }
+            this.cctv_drag_elem.style#z-index = 0;
+            this.cctv_drag_elem.capture(false);
+            this.cctv_drag_elem = null;
+            this.cctv_drag_source_idx = -1;
+        }
     }
 
     event click $(.cctv-cell) (evt) {
@@ -1137,8 +1300,7 @@ class App: Reactor.Component
                         "",
                         function(res=null) {
                             if (res != null) {
-                                if (v.restart_remote_device) v.restart_remote_device();
-                                if (v.cctv_reconnect) v.cctv_reconnect();
+                                v.restart_remote_device();
                             }
                         }
                     );
@@ -1785,20 +1947,22 @@ event click $(li#login) (_, me) {
 
 function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
-    if (app && app.is_logged_in) {
-        handler.closing(x, y, w, h);
-    } else {
-        handler.closing(x, y, 0, 0);
-    }
+    handler.closing(x, y, w, h);
     return true;
 }
 
 function self.ready() {
     var r = handler.get_size();
-    if (app) app.saved_window_size = r;
-    
-    // Default small login window geometry
-    centerize(scaleIt(360), scaleIt(460));
+    if (r && isReasonableSize(r) && r[2] > 0 && r[3] > 0) {
+        var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
+        if (r[2] >= sw && r[3] >= sh) {
+            self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
+        } else {
+            view.move(r[0], r[1], incoming_only ? scaleIt(incoming_only_width) : r[2], r[3]);
+        }
+    } else {
+        centerize(scaleIt(incoming_only ? incoming_only_width : 700), scaleIt(incoming_only ? 390 : 540));
+    }
     
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);
@@ -1812,17 +1976,7 @@ function showAbout() {
 }
 
 function showSettings() {
-    if ($(#overlay).style#display == 'block') return;
-    var menu = myIdMenu.$(menu#config-options);
-    var anchor = $(#open-settings);
-    if (!anchor) anchor = myIdMenu.$(svg#menu);
-    // show immediately at button, then update menu state asynchronously
-    anchor.popup(menu);
-    self.timer(1ms, function() {
-        audioInputMenu.update({ show: true });
-        myIdMenu.toggleMenuState();
-        if (direct_server) direct_server.update();
-    });
+    // Deprecated, handled by tab-settings now
 }
 
 function checkConnectStatus() {
@@ -1836,13 +1990,13 @@ function checkConnectStatus() {
         tmp = handler.using_public_server();
         if (tmp != using_public_server) {
             using_public_server = tmp;
-            app.connect_status.update();
+            if (app.connect_status) app.connect_status.update();
         }
         tmp = handler.get_connect_status();
         if (tmp[0] != connect_status) {
             connect_status = tmp[0];
-            app.connect_status.update();
-            myIdMenu.update();
+            if (app.connect_status) app.connect_status.update();
+            if (typeof myIdMenu != "undefined" && myIdMenu) myIdMenu.update();
         }
         if (tmp[1] != key_confirmed) {
             key_confirmed = tmp[1];
@@ -1885,7 +2039,7 @@ function self.onMouse(evt) {
         check_if_overlay();
         break;
     case Event.MOUSE_LEAVE:
-        $(#overlay).style#display = 'none';
+        if ($(#overlay)) $(#overlay).style#display = 'none';
         enter = false;
         break;
     }
@@ -1915,7 +2069,7 @@ function check_if_overlay() {
 checkConnectStatus();
 
 function set_local_user_info(user) {
-    var user_info = {name: user.name};
+    var user_info = {name: user.name || user.email || ""};
     if (user.display_name) {
         user_info.display_name = user.display_name;
     }
@@ -1929,52 +2083,84 @@ function set_local_user_info(user) {
 }
 
 function login() {
-    var name0 = getUserName();
-    var pass0 = '';
-    msgbox("custom-login", translate('Login'), <div .form .set-password> 
-            <div><span>{translate('Username')}:</span><input|text name="username" value={name0} .outline-focus /></div> 
-            <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
-        </div>, "", function(res=null, show_progress) {
-        if (!res) return;
-        show_progress();
-        var name = (res.username || '').trim();
-        if (!name) {
-            show_progress(false, translate("Username missed"));
-            return " ";
-        }
-        var pass = (res.password || '').trim();
-        if (!pass) {
-            show_progress(false, translate("Password missed"));
-            return " ";
-        }
-        abLoading = true;
-        var url = handler.get_api_server();
-        httpRequest(url + "/api/login", #post, {username: name, password: pass, id: my_id, uuid: handler.get_uuid(), type: 'account', deviceInfo: getDeviceInfo()}, function(data) {
-            if (data.error) {
-                abLoading = false;
-                var err = translate(data.error);
-                show_progress(false, err);
-                return;
-            }
-            if (data.type == 'email_check') {
-                abLoading = false;
-                show_progress(-1);
-                on_2fa_check(data);
-                return;
-            }
-            handler.set_local_option("access_token", data.access_token);
-            set_local_user_info(data.user);
-            show_progress(-1);
-            myIdMenu.update();
-            getAb();
-        }, function(err, status) {
-            abLoading = false;
-            err = translate(err);
-            if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
-            show_progress(false, err);
-        });
+    var opened_url = false;
+    
+    var dialog_callback = function(res, show_progress) {
+        handler.account_auth_cancel();
         return " ";
-      }, msgbox_default_height, get_msgbox_width());
+    };
+
+    msgbox("custom-login-waiting", translate('Login'), 
+        <div style="padding: 2em; text-align: center;">
+            <div style="margin-bottom: 1em; font-size: 1.2em;">{translate('Requesting Google Login...')}</div>
+            <div #login-status-msg style="color: #888;">{translate('Please wait...')}</div>
+        </div>, "", dialog_callback, msgbox_default_height, get_msgbox_width());
+
+    var uuid = handler.get_id(); 
+    handler.account_auth("google", "", uuid, true);
+
+    self.timer(1000ms, function() {
+        if (!$(#login-status-msg)) {
+            handler.account_auth_cancel();
+            return false;
+        }
+
+        try {
+            var res_str = handler.account_auth_result();
+            if (!res_str || res_str == "") return true;
+
+            var res = JSON.parse(res_str);
+
+            if (res.failed_msg && res.failed_msg != "") {
+                handler.account_auth_cancel();
+                closeMsgbox();
+                if (res.failed_msg.indexOf("Too many pending login") < 0) {
+                    msgbox("custom-error", "Authentication Failed", res.failed_msg);
+                }
+                return false;
+            }
+
+            if (res.url && !opened_url) {
+                opened_url = true;
+                $(#login-status-msg).text = translate("Please complete login in your browser...");
+                handler.open_url(res.url);
+            }
+
+            if (res.auth_body || res.state_msg == "Login account auth") {
+                var user_name = "";
+                if (res.auth_body) {
+                    var data = res.auth_body;
+                    handler.set_local_option("access_token", data.access_token);
+                    set_local_user_info(data.user);
+                    if (data.user) {
+                        user_name = data.user.name || data.user.email || "";
+                    }
+                }
+                closeMsgbox();
+                
+                if (user_name) {
+                    msgbox("success", translate("Login Successful"), translate("Welcome") + " " + user_name + "!");
+                } else {
+                    msgbox("success", translate("Login Successful"), translate("Login account auth"));
+                }
+                
+                myIdMenu.update();
+                getAb();
+                
+                // Notify CCTV dashboard if it's open
+                if (app && app.on_login_success) {
+                    app.on_login_success();
+                }
+                return false;
+            }
+        } catch(e) {
+            closeMsgbox();
+            msgbox("custom-error", "Error", "TIS Exception: " + e.toString());
+            return false;
+        }
+        
+        return true;
+    });
 }
 
 function on_2fa_check(last_msg) {
@@ -2095,82 +2281,58 @@ function updateCctvLayout() {
     var container = $(#cctv-grid-container);
     if (!container) return;
     
-    var (cw, ch) = container.box(#dimension, #inner);
-    cw -= 20; // padding
-    ch -= 20; // padding
+    var cw = container.box(#width, #inner);
+    var ch = container.box(#height, #inner);
+    if (cw <= 0 || ch <= 0) return;
     
-    var cells = $$(.cctv-cell);
+    var cells = container.$$(.cctv-cell);
     var total = cells.length;
     if (total == 0) return;
     
-    var best_cols = 1;
-    var best_rows = 1;
-    var max_area = 0;
-    
-    for (var cols = 1; cols <= total; ++cols) {
-        var rows = Math.ceil(total.toFloat() / cols.toFloat()).toInteger();
-        var test_w = (cw / cols).toInteger();
-        var test_h = (ch / rows).toInteger();
-        
-        var video_h = test_h - 35;
-        if (video_h < 1) video_h = 1;
-        
-        var eff_w = test_w;
-        var eff_h = (eff_w * 9 / 16).toInteger();
-        if (eff_h > video_h) {
-            eff_h = video_h;
-            eff_w = (eff_h * 16 / 9).toInteger();
+    var is_auto_fit = app.cctv_auto_fit !== false;
+    var cell_w, cell_h;
+    if (is_auto_fit) {
+        var best_w = 50;
+        for (var cols = 1; cols <= total; ++cols) {
+            var rows = Math.ceil(total.toFloat() / cols.toFloat()).toInteger();
+            var max_w_by_width = ((cw - 20) / cols).toInteger() - 6;
+            var max_w_by_height = (((ch - 20) / rows.toFloat()) - 35) * 16.0 / 9.0 - 6;
+            
+            var w = max_w_by_width < max_w_by_height ? max_w_by_width : max_w_by_height;
+            if (w > best_w) best_w = w.toInteger();
         }
-        
-        var area = eff_w * eff_h * total;
-        if (area > max_area) {
-            max_area = area;
-            best_cols = cols;
-            best_rows = rows;
-        }
+        cell_w = best_w;
+        cell_h = (cell_w * 9 / 16).toInteger() + 35;
+    } else {
+        var base_w = app.cctv_cell_size || 300;
+        var cols = (cw / base_w).toInteger();
+        if (cols < 1) cols = 1;
+        cell_w = (cw / cols).toInteger() - 1;
+        cell_h = (cell_w * 9 / 16).toInteger() + 35;
     }
     
-    var base_h = (ch / best_rows).toInteger() - 6;
-    if (base_h < 30) base_h = 30;
-    var ch_str = base_h.toString() + "px";
+    if (cell_w < 50) cell_w = 50;
+    if (cell_h < 30) cell_h = 30;
     
-    var i = 0;
+    app.cell_w = cell_w;
+    app.cell_h = cell_h;
+    
+    var cw_str = cell_w.toString() + "px";
+    var ch_str = cell_h.toString() + "px";
+    
     for (var cell in cells) {
-        var row_idx = (i / best_cols).toInteger();
-        var items_in_this_row = total - row_idx * best_cols;
-        if (items_in_this_row > best_cols) items_in_this_row = best_cols;
-        
-        var cw_i = (cw / items_in_this_row).toInteger() - 6;
-        if (cw_i < 50) cw_i = 50;
-        
-        cell.style#width = cw_i.toString() + "px";
+        cell.style#width = cw_str;
         cell.style#height = ch_str;
-        i++;
     }
-    
-    app.cell_w = (cw / best_cols).toInteger();
-    app.cell_h = base_h;
 }
 
 class CctvVideo : Element {
     function msgbox_retry(type, title, text, link, hasRetry) {
         if (hasRetry) {
-            var me = this;
             this.timer(2000, function() {
-                if (me.cctv_reconnect) me.cctv_reconnect();
+                if (this.reconnect) this.reconnect(false);
             });
         }
-    }
-    function cctv_reconnect() {
-        var cell = this.parent;
-        if (!cell) return;
-        var peer_id = cell.attributes["id"].replace("cctv-cell-", "");
-        if (view.push_cctv_peer) {
-            view.push_cctv_peer(peer_id);
-        }
-        this.remove();
-        var new_video = new Element("video");
-        cell.append(new_video);
     }
     function msgbox(type, title, text, link, hasRetry) {}
 }
