@@ -115,6 +115,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         let client_uuid = req.uuid.clone().unwrap_or_default();
                         let client_session_id = req.session_id.clone().unwrap_or_default();
                         let client_is_manager = req.is_manager.unwrap_or(false);
+                        eprintln!("[DEBUG] Login request - user: {}, is_manager: {}", user_id, client_is_manager);
                         
                         let mut conns = state.active_connections.lock().await;
                         let conns_list = conns.entry(user_id.clone()).or_insert_with(Vec::new);
